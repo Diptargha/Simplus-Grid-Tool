@@ -19,6 +19,10 @@ function plot_c(Xw,fbd,varargin)
     [Color,~]      = SimplusGT.LoadVar([],'Color',varargin);
     [PhaseOn,~]    = SimplusGT.LoadVar(1,'PhaseOn',varargin);
     [PhaseShift,~] = SimplusGT.LoadVar(0,'PhaseShift',varargin);
+    [PlotOn,~]     = SimplusGT.LoadVar(1,'PlotOn',varargin);
+    [ExportOn,~]   = SimplusGT.LoadVar(1,'ExportOn',varargin);
+    [ExportFile,ExportFileFlag] = SimplusGT.LoadVar('bode_data.xlsx','ExportFile',varargin);
+    [ExportBus,~]  = SimplusGT.LoadVar([],'ExportBus',varargin);
 
     [M,N,W] = size(Xw);
 
@@ -74,26 +78,67 @@ function plot_c(Xw,fbd,varargin)
         else
             for m = 1:M
                 for n = 1:N
-                    if M*N > 1
-                        figure();
+                    if PlotOn == 1
+                        if M*N > 1
+                            figure();
+                        end
+                        subplot(2,2,1);
+                        p(1)= loglog(fbdn,abs(squeeze(Xwn(m,n,:))));
+                        grid on;  hold on;
+
+                        subplot(2,2,3);
+                        p(2)= semilogx(fbdn,squeeze(Arg_wn(m,n,:)-PhaseShift)*180/pi);
+                        grid on;  hold on;
+
+                        subplot(2,2,2);
+                        p(3)= loglog(fbdp,abs(squeeze(Xwp(m,n,:))));
+                        grid on;  hold on;
+
+                        subplot(2,2,4);
+                        p(4)= semilogx(fbdp,squeeze(Arg_wp(m,n,:)+PhaseShift)*180/pi);
+                        grid on;  hold on;
                     end
-                    subplot(2,2,1);
-                    p(1)= loglog(fbdn,abs(squeeze(Xwn(m,n,:))));
-                    grid on;  hold on;
 
-                    subplot(2,2,3);
-                    p(2)= semilogx(fbdn,squeeze(Arg_wn(m,n,:)-PhaseShift)*180/pi);
-                    grid on;  hold on;
-
-                    subplot(2,2,2);
-                    p(3)= loglog(fbdp,abs(squeeze(Xwp(m,n,:))));
-                    grid on;  hold on;
-
-                    subplot(2,2,4);
-                    p(4)= semilogx(fbdp,squeeze(Arg_wp(m,n,:)+PhaseShift)*180/pi);
-                    grid on;  hold on;
                 end
-            end    
+            end
+
+            if ExportOn == 1
+                if ExportFileFlag == 0
+                    Filename = 'bode_data.xlsx';
+                else
+                    Filename = ExportFile;
+                end
+
+                [fbdn_abs,idx_n] = sort(abs(fbdn(:)),'ascend');
+                Xwn_export = Xwn(:,:,idx_n);
+                Arg_wn_export = Arg_wn(:,:,idx_n);
+
+                T_neg_mag_phase = localMagPhaseTable(fbdn_abs,Xwn_export,Arg_wn_export - PhaseShift,M,N);
+                T_pos_mag_phase = localMagPhaseTable(fbdp(:),Xwp,Arg_wp + PhaseShift,M,N);
+                T_neg_real_imag = localRealImagTable(fbdn_abs,Xwn_export,M,N);
+                T_pos_real_imag = localRealImagTable(fbdp(:),Xwp,M,N);
+
+                if isempty(ExportBus)
+                    SheetNegMagPhase = 'Negative_MagPhase';
+                    SheetPosMagPhase = 'Positive_MagPhase';
+                    SheetNegRealImag = 'Negative_RealImag';
+                    SheetPosRealImag = 'Positive_RealImag';
+                else
+                    SheetNegMagPhase = sprintf('Bus%d_Neg_MagPhase',ExportBus);
+                    SheetPosMagPhase = sprintf('Bus%d_Pos_MagPhase',ExportBus);
+                    SheetNegRealImag = sprintf('Bus%d_Neg_RealImag',ExportBus);
+                    SheetPosRealImag = sprintf('Bus%d_Pos_RealImag',ExportBus);
+                end
+                SheetNegMagPhase = SheetNegMagPhase(1:min(length(SheetNegMagPhase),31));
+                SheetPosMagPhase = SheetPosMagPhase(1:min(length(SheetPosMagPhase),31));
+                SheetNegRealImag = SheetNegRealImag(1:min(length(SheetNegRealImag),31));
+                SheetPosRealImag = SheetPosRealImag(1:min(length(SheetPosRealImag),31));
+
+                writetable(T_neg_mag_phase, Filename, 'Sheet', SheetNegMagPhase);
+                writetable(T_pos_mag_phase, Filename, 'Sheet', SheetPosMagPhase);
+                writetable(T_neg_real_imag, Filename, 'Sheet', SheetNegRealImag);
+                writetable(T_pos_real_imag, Filename, 'Sheet', SheetPosRealImag);
+            end
         end
     else
 
@@ -152,4 +197,37 @@ function plot_c(Xw,fbd,varargin)
     catch
     end
 
+end
+
+function T = localMagPhaseTable(fbd,Xw,Arg_w,M,N)
+
+    Data = fbd(:);
+    VarNames = {'Frequency_Hz'};
+    for m = 1:M
+        for n = 1:N
+            EntryName = sprintf('%d%d',m,n);
+            Mag = abs(squeeze(Xw(m,n,:)));
+            Phase = squeeze(Arg_w(m,n,:))*180/pi;
+            Data = [Data, Mag(:), Phase(:)]; %#ok<AGROW>
+            VarNames = [VarNames, {['Magnitude_',EntryName], ['Phase_',EntryName,'_deg']}]; %#ok<AGROW>
+        end
+    end
+
+    T = array2table(Data,'VariableNames',VarNames);
+end
+
+function T = localRealImagTable(fbd,Xw,M,N)
+
+    Data = fbd(:);
+    VarNames = {'Frequency_Hz'};
+    for m = 1:M
+        for n = 1:N
+            EntryName = sprintf('%d%d',m,n);
+            XwEntry = squeeze(Xw(m,n,:));
+            Data = [Data, real(XwEntry(:)), imag(XwEntry(:))]; %#ok<AGROW>
+            VarNames = [VarNames, {['Real_',EntryName], ['Imaginary_',EntryName]}]; %#ok<AGROW>
+        end
+    end
+
+    T = array2table(Data,'VariableNames',VarNames);
 end
