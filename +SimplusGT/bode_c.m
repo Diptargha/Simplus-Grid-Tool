@@ -30,6 +30,7 @@ function Xw = bode_c(X,sbd,varargin)
     [PhaseShift,~] = SimplusGT.LoadVar(0,'PhaseShift',varargin);    % Default 0, i.e., no phase shift
     [LineWidth,~]  = SimplusGT.LoadVar(1.5,'LineWidth',varargin);   % Default 1.5
     [Color,~]      = SimplusGT.LoadVar([],'Color',varargin);
+    [ExportOn,~]   = SimplusGT.LoadVar(0,'ExportOn',varargin);
     
     if (Option == 1)
         PlotOn = 1;
@@ -60,9 +61,9 @@ function Xw = bode_c(X,sbd,varargin)
             if InverseOn == 1
                 Xw(:,:,n) = 1/Xw(:,:,n);
             end
-            if(isnan(Xw(:,:,n)))
+            if any(any(isnan(Xw(:,:,n))))
                 Xw(:,:,n) = zeros(M,N);
-            elseif(isinf(Xw(n)))
+            elseif any(any(isinf(Xw(:,:,n))))
                 Xw(:,:,n) = zeros(M,N);
             end
         end
@@ -89,8 +90,8 @@ function Xw = bode_c(X,sbd,varargin)
         error(['Error: Wrong option.']);
     end
 
-    if PlotOn == 1
-        SimplusGT.plot_c(Xw,imag(sbd)/(2*pi),'PhaseOn',PhaseOn,'PhaseShift',PhaseShift,'LineWidth',LineWidth,'Color',Color,varargin);
+    if PlotOn == 1 || ExportOn == 1
+        SimplusGT.plot_c(Xw,imag(sbd)/(2*pi),'PhaseOn',PhaseOn,'PhaseShift',PhaseShift,'LineWidth',LineWidth,'Color',Color,'PlotOn',PlotOn,'ExportOn',ExportOn,varargin{:});
     else
         fprintf('Warning: The bode plot is disabled.');
     end

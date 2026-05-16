@@ -344,9 +344,9 @@ if UserDataStruct.Advance.EnableCreateSimulinkModel == 1
     close_system(NameModel,0);
     
     % Create the simulink model
-    SimplusGT.Simulink.MainSimulink(NameModel,ListBusNew,ListLineNew,ApparatusBus,ApparatusType,Advance);
-    fprintf('Get the simulink model successfully! \n')
-    fprintf('Please click the "run" button in the model to run it.\n')
+    %SimplusGT.Simulink.MainSimulink(NameModel,ListBusNew,ListLineNew,ApparatusBus,ApparatusType,Advance);
+    %fprintf('Get the simulink model successfully! \n')
+    %fprintf('Please click the "run" button in the model to run it.\n')
     %fprintf('Warning: for later use of the simulink model, please "save as" a different name.\n')
 
 else
@@ -405,6 +405,10 @@ function PlotAdmittanceSpectrum(NumBus,ApparatusBus,ApparatusType,GsysSs,PortBus
     OmegaPN = [-flip(OmegaP),OmegaP];
     CountLegend = 0;
     VecLegend = {};
+    ExportFileCplx = 'bode_data_complex_vector_all_buses.xlsx';
+    if exist(ExportFileCplx,'file') == 2
+        delete(ExportFileCplx);
+    end
     
     % Transform matrix from transfer function to complex vector
     T = [1,1i;
@@ -423,9 +427,10 @@ function PlotAdmittanceSpectrum(NumBus,ApparatusBus,ApparatusType,GsysSs,PortBus
             YcellSymCplx{k} = SimplusGT.ss2sym(YcellSsCplx{k});
             
             figure(FigN);
-            SimplusGT.bode_c(YcellSym{k}(1,1),1j*OmegaP,'PhaseOn',1); 
+            SimplusGT.bode_c(YcellSym{k}(1,1),1j*OmegaP,'PhaseOn',1,'ExportOn',0); 
             figure(FigN+1);
-            SimplusGT.bode_c(YcellSymCplx{k}(1,1),1j*OmegaPN,'PhaseOn',1); 
+            SimplusGT.bode_c(YcellSymCplx{k}(1,1),1j*OmegaPN,'PhaseOn',1,'ExportOn',0);
+            SimplusGT.bode_c(YcellSymCplx{k},1j*OmegaPN,'PhaseOn',1,'PlotOn',0,'ExportOn',1,'ExportFile',ExportFileCplx,'ExportBus',k);
             
             CountLegend = CountLegend + 1;
             VecLegend{CountLegend} = ['Bus',num2str(k)];
