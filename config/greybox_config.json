@@ -1,0 +1,16 @@
+{
+  "case_path": "../Examples/AcPowerSystem/SingleApparatusInfiniteBus/SgInfiniteBus.json",
+  "output_path": "../Results/SgInfiniteBus_greybox_results.json",
+  "layers": ["admittance-only"],
+  "modes": [0],
+  "apparatus": null,
+  "layer3_apparatus": null,
+  "sensitivity_lines": [],
+  "frequency_grid": {
+    "min_hz": 0.1,
+    "max_hz": 1000.0,
+    "count": 80
+  },
+  "max_admittance_samples": 80,
+  "max_matrix_size": 80
+}

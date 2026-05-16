@@ -1,0 +1,1416 @@
+{
+  "schema_version": 1,
+  "case": {
+    "path": "Examples/AcPowerSystem/SingleApparatusInfiniteBus/SgInfiniteBus.json",
+    "bus_count": 2,
+    "line_count": 1,
+    "state_count": 18,
+    "input_count": 6,
+    "output_count": 8
+  },
+  "stability": {
+    "stable": true,
+    "finite_mode_count": 8,
+    "raw_eigenvalue_count": 18,
+    "unstable_mode_count": 0
+  },
+  "warnings": [
+    "Whole-system E matrix is singular; using generalized eigenvalues only"
+  ],
+  "apparatus": [
+    {
+      "buses": [
+        1
+      ],
+      "type": 90,
+      "name": "InfiniteBusAc"
+    },
+    {
+      "buses": [
+        2
+      ],
+      "type": 0,
+      "name": "SynchronousMachine"
+    }
+  ],
+  "states": [
+    {
+      "index": 0,
+      "name": "xi_1",
+      "component": "InfiniteBusAc (type 90) at bus 1"
+    },
+    {
+      "index": 1,
+      "name": "xi_2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 2,
+      "name": "i_d2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 3,
+      "name": "i_q2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 4,
+      "name": "w2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 5,
+      "name": "theta2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 6,
+      "name": "id1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 7,
+      "name": "iq1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 8,
+      "name": "id1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 9,
+      "name": "iq1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 10,
+      "name": "id1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 11,
+      "name": "iq1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 12,
+      "name": "id1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 13,
+      "name": "iq1-2",
+      "component": "Network branch 1-2"
+    },
+    {
+      "index": 14,
+      "name": "xi_1",
+      "component": "InfiniteBusAc (type 90) at bus 1"
+    },
+    {
+      "index": 15,
+      "name": "xi_2",
+      "component": "SynchronousMachine (type 0) at bus 2"
+    },
+    {
+      "index": 16,
+      "name": "xi_3",
+      "component": "Apparatus at bus 3"
+    },
+    {
+      "index": 17,
+      "name": "xi_4",
+      "component": "Apparatus at bus 4"
+    }
+  ],
+  "eigenvalues": [
+    {
+      "index": 0,
+      "rad_per_sec": {
+        "real": 0.0,
+        "imag": 0.0
+      },
+      "hz": {
+        "real": 0.0,
+        "imag": 0.0
+      },
+      "frequency_hz": 0.0,
+      "real_hz": 0.0,
+      "imag_hz": 0.0
+    },
+    {
+      "index": 1,
+      "rad_per_sec": {
+        "real": -1260.34062544936,
+        "imag": 377.0302894636457
+      },
+      "hz": {
+        "real": -200.58944051979668,
+        "imag": 60.006234263507366
+      },
+      "frequency_hz": 60.00623426350736,
+      "real_hz": -200.58944051979668,
+      "imag_hz": 60.00623426350736
+    },
+    {
+      "index": 2,
+      "rad_per_sec": {
+        "real": -1260.34062544936,
+        "imag": -377.0302894636457
+      },
+      "hz": {
+        "real": -200.58944051979668,
+        "imag": -60.006234263507366
+      },
+      "frequency_hz": 60.00623426350736,
+      "real_hz": -200.58944051979668,
+      "imag_hz": -60.00623426350736
+    },
+    {
+      "index": 3,
+      "rad_per_sec": {
+        "real": -1.561265868800828,
+        "imag": 0.0
+      },
+      "hz": {
+        "real": -0.24848318050031434,
+        "imag": 0.0
+      },
+      "frequency_hz": 0.0,
+      "real_hz": -0.24848318050031434,
+      "imag_hz": 0.0
+    },
+    {
+      "index": 4,
+      "rad_per_sec": {
+        "real": 8.38021620728709e-14,
+        "imag": 376.9911184307753
+      },
+      "hz": {
+        "real": 1.3337528335685559e-14,
+        "imag": 60.00000000000002
+      },
+      "frequency_hz": 60.00000000000002,
+      "real_hz": 1.3337528335685559e-14,
+      "imag_hz": 60.00000000000002
+    },
+    {
+      "index": 5,
+      "rad_per_sec": {
+        "real": 8.38021620728709e-14,
+        "imag": -376.9911184307753
+      },
+      "hz": {
+        "real": 1.3337528335685559e-14,
+        "imag": -60.00000000000002
+      },
+      "frequency_hz": 60.00000000000002,
+      "real_hz": 1.3337528335685559e-14,
+      "imag_hz": -60.00000000000002
+    },
+    {
+      "index": 6,
+      "rad_per_sec": {
+        "real": -1.2933849127913063e-14,
+        "imag": 376.9911184307754
+      },
+      "hz": {
+        "real": -2.0584860219121637e-15,
+        "imag": 60.000000000000036
+      },
+      "frequency_hz": 60.00000000000003,
+      "real_hz": -2.0584860219121637e-15,
+      "imag_hz": 60.00000000000003
+    },
+    {
+      "index": 7,
+      "rad_per_sec": {
+        "real": -1.2933849127913063e-14,
+        "imag": -376.9911184307754
+      },
+      "hz": {
+        "real": -2.0584860219121637e-15,
+        "imag": -60.000000000000036
+      },
+      "frequency_hz": 60.00000000000003,
+      "real_hz": -2.0584860219121637e-15,
+      "imag_hz": -60.00000000000003
+    }
+  ],
+  "modes": [
+    {
+      "index": 0,
+      "eigenvalue": {
+        "real": -1260.34062544936,
+        "imag": 377.0302894636457
+      },
+      "eigenvalue_hz": {
+        "real": -200.58944051979668,
+        "imag": 60.006234263507366
+      },
+      "frequency_hz": 60.00623426350736,
+      "damping_ratio": 0.9580502518794549,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.522724550795454
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.0558667231890972e-16
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.0556327192675288e-16
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.410535544055565e-20
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.900236547166091e-32
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.54529901004369e-32
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.234570309631318e-32
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.790928811769052e-32
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "eigenvalue": {
+        "real": -1260.34062544936,
+        "imag": -377.0302894636457
+      },
+      "eigenvalue_hz": {
+        "real": -200.58944051979668,
+        "imag": -60.006234263507366
+      },
+      "frequency_hz": 60.00623426350736,
+      "damping_ratio": 0.9580502518794549,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.522724550795454
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.0558667231890972e-16
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.0556327192675288e-16
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.410535544055565e-20
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.900236547166091e-32
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.54529901004369e-32
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.234570309631318e-32
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.790928811769052e-32
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "eigenvalue": {
+        "real": -1.561265868800828,
+        "imag": 0.0
+      },
+      "eigenvalue_hz": {
+        "real": -0.24848318050031434,
+        "imag": 0.0
+      },
+      "frequency_hz": 0.0,
+      "damping_ratio": 1.0,
+      "participation": [
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.11618689622099745
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 4.1152603250335745e-12
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 3.9808588283062514e-16
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 7.03987390871977e-17
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 5.732220429075906e-31
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 4.436793689282787e-31
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 3.901511286805569e-31
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 5.724895082945443e-32
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "eigenvalue": {
+        "real": -1.2933849127913063e-14,
+        "imag": 376.9911184307754
+      },
+      "eigenvalue_hz": {
+        "real": -2.0584860219121637e-15,
+        "imag": 60.000000000000036
+      },
+      "frequency_hz": 60.00000000000003,
+      "damping_ratio": 3.430810036520271e-17,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.0017059186045100191
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.571794561214721e-15
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.571794561214716e-15
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 6.172250779762894e-15
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 6.172250779762892e-15
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.2361108031256716e-32
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 3.847331940482027e-33
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 5.730268082850277e-35
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "eigenvalue": {
+        "real": -1.2933849127913063e-14,
+        "imag": -376.9911184307754
+      },
+      "eigenvalue_hz": {
+        "real": -2.0584860219121637e-15,
+        "imag": -60.000000000000036
+      },
+      "frequency_hz": 60.00000000000003,
+      "damping_ratio": 3.430810036520271e-17,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.0017059186045100191
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.571794561214721e-15
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.571794561214716e-15
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 6.172250779762894e-15
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 6.172250779762892e-15
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.2361108031256716e-32
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 3.847331940482027e-33
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 5.730268082850277e-35
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "eigenvalue": {
+        "real": 0.0,
+        "imag": 0.0
+      },
+      "eigenvalue_hz": {
+        "real": 0.0,
+        "imag": 0.0
+      },
+      "frequency_hz": 0.0,
+      "damping_ratio": null,
+      "participation": [
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.0
+        },
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "eigenvalue": {
+        "real": 8.38021620728709e-14,
+        "imag": 376.9911184307753
+      },
+      "eigenvalue_hz": {
+        "real": 1.3337528335685559e-14,
+        "imag": 60.00000000000002
+      },
+      "frequency_hz": 60.00000000000002,
+      "damping_ratio": -2.2229213892809257e-16,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.009166709641706353
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.0394054117489828e-14
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.0394054117489811e-14
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.673750031638433e-15
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.673750031638431e-15
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.95313677798949e-30
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.3212883256108306e-30
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.123050186527138e-32
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "eigenvalue": {
+        "real": 8.38021620728709e-14,
+        "imag": -376.9911184307753
+      },
+      "eigenvalue_hz": {
+        "real": 1.3337528335685559e-14,
+        "imag": -60.00000000000002
+      },
+      "frequency_hz": 60.00000000000002,
+      "damping_ratio": -2.2229213892809257e-16,
+      "participation": [
+        {
+          "state": "xi_2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.0
+        },
+        {
+          "state": "xi_1",
+          "component": "InfiniteBusAc (type 90) at bus 1",
+          "factor": 0.009166709641706353
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.0394054117489828e-14
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 1.0394054117489811e-14
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.673750031638433e-15
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 7.673750031638431e-15
+        },
+        {
+          "state": "i_q2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.95313677798949e-30
+        },
+        {
+          "state": "i_d2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 1.3212883256108306e-30
+        },
+        {
+          "state": "w2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 2.123050186527138e-32
+        },
+        {
+          "state": "theta2",
+          "component": "SynchronousMachine (type 0) at bus 2",
+          "factor": 0.0
+        },
+        {
+          "state": "id1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        },
+        {
+          "state": "iq1-2",
+          "component": "Network branch 1-2",
+          "factor": 0.0
+        }
+      ]
+    }
+  ],
+  "power_flow": {
+    "rows": [
+      [
+        0.8999999998727544,
+        -0.2852124819221095,
+        0.995,
+        0.0,
+        376.99111843077515
+      ],
+      [
+        -0.8999999998727544,
+        -0.3000000164994788,
+        0.9998184322542218,
+        0.6286414498174561,
+        376.99111843077515
+      ]
+    ],
+    "columns": [
+      "P_load_convention",
+      "Q_load_convention",
+      "V",
+      "angle_rad",
+      "omega_rad_s"
+    ]
+  },
+  "network_graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "label": "Bus 1",
+        "bus_type": 1,
+        "area": 1,
+        "ac_dc": "AC",
+        "voltage": 0.995,
+        "angle_rad": 0.0,
+        "apparatus": [
+          {
+            "name": "InfiniteBusAc",
+            "type": 90,
+            "buses": [
+              1
+            ]
+          }
+        ],
+        "shunts": []
+      },
+      {
+        "id": 2,
+        "label": "Bus 2",
+        "bus_type": 3,
+        "area": 1,
+        "ac_dc": "AC",
+        "voltage": 1.0,
+        "angle_rad": 0.0,
+        "apparatus": [
+          {
+            "name": "SynchronousMachine",
+            "type": 0,
+            "buses": [
+              2
+            ]
+          }
+        ],
+        "shunts": []
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "from": 1,
+        "to": 2,
+        "r": 0.0,
+        "x": 0.65,
+        "b": 0.0,
+        "g": 0.0,
+        "tap": 1.0,
+        "ac_dc": "AC"
+      }
+    ],
+    "shunts": []
+  },
+  "matrices": {
+    "A": {
+      "name": "whole_system_dss_A",
+      "rows": 18,
+      "cols": 18,
+      "sampled": false,
+      "row_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "col_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "row_labels": [
+        "xi_1",
+        "xi_2",
+        "i_d2",
+        "i_q2",
+        "w2",
+        "theta2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "xi_1",
+        "xi_2",
+        "xi_3",
+        "xi_4"
+      ],
+      "col_labels": [
+        "xi_1",
+        "xi_2",
+        "i_d2",
+        "i_q2",
+        "w2",
+        "theta2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "id1-2",
+        "iq1-2",
+        "xi_1",
+        "xi_2",
+        "xi_3",
+        "xi_4"
+      ],
+      "row_components": [
+        "InfiniteBusAc (type 90) at bus 1",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "InfiniteBusAc (type 90) at bus 1",
+        "SynchronousMachine (type 0) at bus 2",
+        "Apparatus at bus 3",
+        "Apparatus at bus 4"
+      ],
+      "col_components": [
+        "InfiniteBusAc (type 90) at bus 1",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "SynchronousMachine (type 0) at bus 2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "Network branch 1-2",
+        "InfiniteBusAc (type 90) at bus 1",
+        "SynchronousMachine (type 0) at bus 2",
+        "Apparatus at bus 3",
+        "Apparatus at bus 4"
+      ],
+      "max_abs": 1260.406972681362,
+      "values": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1260.4069726575995,
+          376.9911184428123,
+          -3.2440018598218785,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1256.6370614329508,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -376.9911184345059,
+          -1260.406972681362,
+          0.8022584403409969,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1256.6370614419943
+        ],
+        [
+          0.0,
+          0.0,
+          60.598615004949565,
+          0.0,
+          -1.4285714285583744,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0000000000645026,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          289.9931680236732,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -289.9931680236732,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          289.9931680236732,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -289.9931680236732,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          579.986336053086,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          579.9863360658651,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          289.9931680236732,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          376.99111843077515,
+          0.0,
+          0.0,
+          -289.9931680236732,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          289.9931680236732,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -289.9931680236732,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          579.986336053086,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          579.9863360658651,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -376.99111843077515,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ]
+    }
+  }
+}

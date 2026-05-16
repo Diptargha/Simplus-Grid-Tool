@@ -14,7 +14,7 @@ General principle: if a positive bar is found in damping plot,  it implies that 
 All values are normalised to 1.
 
 Layer 3 (Parameter Sensitivity):
-This layer tells you how to tune the paramters to shift the mode leftwards.
+This layer tells you how to tune the parameters to shift the mode leftwards.
 
 Small-signal Strength:
 Value of impedance margin ratio (IMR) gives you the small-signal system strength at different locations.
