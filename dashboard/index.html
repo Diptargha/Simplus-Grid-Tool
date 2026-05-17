@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimplusGT Modal Dashboard</title>
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --panel: #ffffff;
+      --text: #1f2328;
+      --muted: #667085;
+      --line: #d7dde8;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --teal: #0891b2;
+      --purple: #7c3aed;
+      --danger: #b42318;
+      --ok: #067647;
+    }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 24px 32px 12px;
+      background: #fbfcff;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    main { padding: 24px 32px; display: grid; gap: 24px; }
+    .controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 16px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .stat { background: #fbfcff; }
+    .stat .value { font-size: 24px; font-weight: 700; color: var(--accent); }
+    .stat .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 24px; }
+    svg { width: 100%; height: 420px; background: #fcfdff; border: 1px solid var(--line); border-radius: 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    tr.mode-row { cursor: pointer; }
+    tr.mode-row:hover { background: #f2f4f7; }
+    tr.selected { background: #eff6ff; }
+    .bar { height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+    .bar span { display: block; height: 100%; background: var(--purple); }
+    .plot-wrap { position: relative; }
+    .plot-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+    button {
+      border: 1px solid var(--line);
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    .tooltip {
+      position: fixed;
+      display: none;
+      max-width: 280px;
+      padding: 10px 12px;
+      background: #111827;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .matrix-grid {
+      display: grid;
+      gap: 1px;
+      width: 100%;
+      max-height: 560px;
+      overflow: auto;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .matrix-cell {
+      min-width: 5px;
+      min-height: 5px;
+    }
+    .network-wrap { position: relative; }
+    .form-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: #fff;
+      color: var(--text);
+    }
+    .network-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+    .legend-item { display: inline-flex; gap: 6px; align-items: center; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); }
+    .danger { color: var(--danger); }
+    @media (max-width: 900px) {
+      .grid, .split { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SimplusGT Modal Dashboard</h1>
+    <div class="controls">
+      <label>Load results JSON <input id="fileInput" type="file" accept="application/json,.json"></label>
+      <span id="casePath">No file loaded</span>
+    </div>
+  </header>
+  <main>
+    <section class="grid" id="stats"></section>
+    <section class="split">
+      <div class="panel">
+        <h2>Eigenvalue Map</h2>
+        <div class="plot-actions">
+          <button id="zoomIn">Zoom in</button>
+          <button id="zoomOut">Zoom out</button>
+          <button id="resetZoom">Reset</button>
+          <span>Mouse wheel zooms, drag pans, hover points for details.</span>
+        </div>
+        <div class="plot-wrap">
+          <svg id="plot" role="img" aria-label="Eigenvalue scatter plot"></svg>
+          <div id="tooltip" class="tooltip"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Selected Mode Participation</h2>
+        <div id="participation" class="muted">Select a mode from the table.</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Network Connectivity</h2>
+      <div class="network-legend">
+        <span class="legend-item"><span class="legend-dot" style="background: var(--accent);"></span> AC bus</span>
+        <span class="legend-item"><span class="legend-dot" style="background: var(--teal);"></span> DC bus</span>
+        <span class="legend-item"><span class="legend-dot" style="background: var(--purple);"></span> Apparatus</span>
+        <span class="legend-item"><span class="legend-dot" style="background: var(--danger);"></span> Shunt/load</span>
+      </div>
+      <div class="network-wrap">
+        <svg id="networkGraph" role="img" aria-label="Network connectivity graph"></svg>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Modes</h2>
+      <div id="modes"></div>
+    </section>
+    <section class="panel">
+      <h2>System A Matrix</h2>
+      <p id="matrixMeta" class="muted"></p>
+      <div id="matrixHeatmap" class="matrix-grid"></div>
+    </section>
+    <section class="panel">
+      <h2>Greybox Analysis</h2>
+      <p id="greyboxSummary" class="muted">No greybox data in this result file.</p>
+      <div class="form-row">
+        <label class="muted">Admittance channel <select id="admittanceChannel"></select></label>
+      </div>
+      <div class="plot-actions">
+        <button id="admittanceZoomIn">Zoom in</button>
+        <button id="admittanceZoomOut">Zoom out</button>
+        <button id="admittanceResetZoom">Reset</button>
+        <span>Mouse wheel zooms, drag pans, hover points for values.</span>
+      </div>
+      <p id="admittanceMeta" class="muted"></p>
+      <svg id="admittancePlot" role="img" aria-label="Frequency-dependent admittance plot"></svg>
+      <div id="greyboxLayers"></div>
+    </section>
+  </main>
+  <script src="dashboard.js"></script>
+</body>
+</html>
