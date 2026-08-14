@@ -7,7 +7,104 @@ from typing import Sequence
 
 import numpy as np
 
-from .dss import DescriptorStateSpace, append, switch_inputs_outputs
+from .dss import DescriptorStateSpace, append, feedback, switch_inputs_outputs
+
+
+def _series(g1: DescriptorStateSpace, g2: DescriptorStateSpace) -> DescriptorStateSpace:
+    """Series connection ``g2 * g1`` (g1 outputs feed g2 inputs)."""
+
+    if g1.ny != g2.nu:
+        raise ValueError("Series connection requires matching intermediate dimensions")
+    a = np.block([
+        [g1.A, np.zeros((g1.nx, g2.nx))],
+        [g2.B @ g1.C, g2.A],
+    ])
+    b = np.vstack([g1.B, g2.B @ g1.D])
+    c = np.hstack([g2.D @ g1.C, g2.C])
+    d = g2.D @ g1.D
+    e = block_diag_safe(g1.E, g2.E)
+    return DescriptorStateSpace(
+        a, b, c, d, e,
+        list(g1.states) + list(g2.states),
+        list(g1.inputs),
+        list(g2.outputs),
+    )
+
+
+def block_diag_safe(*blocks: np.ndarray) -> np.ndarray:
+    from scipy.linalg import block_diag as _block_diag
+
+    nonempty = [block for block in blocks if np.asarray(block).size]
+    if not nonempty:
+        return np.zeros((0, 0))
+    return _block_diag(*nonempty)
+
+
+def needs_frame_embedding(apparatus_type: int) -> bool:
+    """MATLAB embeds swing-frame dynamics for AC rotating apparatus (not 90-999 / 1000-1999)."""
+
+    if 90 <= apparatus_type < 1000:
+        return False
+    if 1000 <= apparatus_type < 2000:
+        return False
+    return True
+
+
+def embed_frame_dynamics(model: DescriptorStateSpace, xi: float, y_e: np.ndarray, u_e: np.ndarray) -> DescriptorStateSpace:
+    """Port MATLAB ApparatusModelCreate frame embedding and global-frame alignment."""
+
+    if model.ny < 2 or model.nu < 2:
+        return model
+    w_indices = [idx for idx, name in enumerate(model.outputs) if name.startswith("w")]
+    if not w_indices:
+        raise ValueError("Frame embedding requires an apparatus output named w*")
+    ind_w = w_indices[0]
+
+    v_d, v_q = float(u_e[0]), float(u_e[1])
+    i_d, i_q = float(y_e[0]), float(y_e[1])
+    v0 = np.array([[-v_q], [v_d]], dtype=float)
+    i0 = np.array([[-i_q], [i_d]], dtype=float)
+
+    # Integrate omega: epsilon_dot = w, prepend epsilon to outputs.
+    w_name = model.outputs[ind_w]
+    eps_name = "epsilon" + w_name[1:] if w_name.startswith("w") else "epsilon"
+    bw = np.zeros((1, model.ny))
+    bw[0, ind_w] = 1.0
+    cw = np.vstack([np.ones((1, 1)), np.zeros((model.ny, 1))])
+    dw = np.vstack([np.zeros((1, model.ny)), np.eye(model.ny)])
+    integrator = DescriptorStateSpace.from_state_space(
+        np.zeros((1, 1)),
+        bw,
+        cw,
+        dw,
+        states=[eps_name],
+        inputs=list(model.outputs),
+        outputs=[eps_name] + list(model.outputs),
+    )
+    se = _series(model, integrator)
+
+    # v = v' - V0 * epsilon on the first two inputs.
+    sfb = DescriptorStateSpace.static(v0, inputs=[eps_name], outputs=list(se.inputs[:2]))
+    se = feedback(se, sfb, [0, 1], [0], sign=-1.0)
+
+    # i' = i + I0 * epsilon; drop epsilon from the output list.
+    ly = se.ny
+    sff_d = np.hstack([
+        np.vstack([i0, np.zeros((ly - 3, 1))]),
+        np.eye(ly - 1),
+    ])
+    sff = DescriptorStateSpace.static(sff_d, inputs=list(se.outputs), outputs=list(se.outputs[1:]))
+    se = _series(se, sff)
+
+    # Global steady-frame alignment through Txi similarity transform on the first two ports.
+    txi = np.array([[np.cos(xi), -np.sin(xi)], [np.sin(xi), np.cos(xi)]], dtype=float)
+    txi_left = block_diag_safe(txi, np.eye(se.ny - 2))
+    txi_right = block_diag_safe(np.linalg.inv(txi), np.eye(se.nu - 2))
+    left = DescriptorStateSpace.static(txi_left, inputs=list(se.outputs), outputs=list(se.outputs))
+    right = DescriptorStateSpace.static(txi_right, inputs=list(se.inputs), outputs=list(se.inputs))
+    se = _series(se, left)
+    se = _series(right, se)
+    return se
 
 
 def _para_value(params: dict, name: str, default: float = 0.0) -> float:
@@ -643,12 +740,27 @@ def create_apparatus_model(
     else:
         cls = PlaceholderApparatus
     model = cls(apparatus_type, params, power_flow, buses, ts)
+    model_warnings: list[str] = []
+    if apparatus_type == 19:
+        model_warnings.append(
+            "Apparatus type 19 (stationary-frame GFL) is approximated by the dq GridFollowingVSI model"
+        )
+    if isinstance(model, PlaceholderApparatus):
+        model_warnings.append(
+            f"Unsupported apparatus type {apparatus_type} at bus {buses}; using PlaceholderApparatus"
+        )
     dss = model.to_dss()
+    if needs_frame_embedding(apparatus_type) and not isinstance(model, PlaceholderApparatus):
+        x_e, u_e, xi = model.get_equilibrium()
+        y_e = model.output_at_equilibrium()
+        dss = embed_frame_dynamics(dss, xi, y_e, u_e)
     if len(buses) == 2:
         dss.inputs[:3] = [f"v_d{buses[0]}", f"v_q{buses[0]}", f"v{buses[1]}"]
         dss.outputs[:3] = [f"i_d{buses[0]}", f"i_q{buses[0]}", f"i{buses[1]}"]
     if switch_length:
         dss = switch_inputs_outputs(dss, switch_length)
+    dss.model_warnings = model_warnings  # type: ignore[attr-defined]
+    dss.is_placeholder = isinstance(model, PlaceholderApparatus)  # type: ignore[attr-defined]
     return dss
 
 

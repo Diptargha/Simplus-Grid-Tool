@@ -136,12 +136,121 @@ class DescriptorStateSpace:
     def to_state_space(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         if self.nx == 0:
             return self.A.copy(), self.B.copy(), self.C.copy(), self.D.copy()
-        return np.linalg.solve(self.E, self.A), np.linalg.solve(self.E, self.B), self.C.copy(), self.D.copy()
+        return dss2ss(self)
 
     def eigenvalues(self) -> np.ndarray:
         if self.nx == 0:
             return np.array([], dtype=complex)
-        return eig(self.A, self.E, right=False)
+        try:
+            a, _, _, _ = dss2ss(self)
+            return np.linalg.eigvals(a)
+        except (np.linalg.LinAlgError, ValueError):
+            return eig(self.A, self.E, right=False)
+
+
+def _left_inverse(matrix: np.ndarray, toler: float = 1e-14) -> np.ndarray:
+    """Left inverse matching MATLAB ``lft_inv`` via QR."""
+
+    q, r = np.linalg.qr(matrix, mode="complete")
+    cols = matrix.shape[1]
+    rank = int(np.linalg.matrix_rank(r, tol=toler))
+    if rank < cols:
+        raise np.linalg.LinAlgError("Matrix is not left-invertible")
+    p = r[:cols, :]
+    s = np.hstack([np.linalg.inv(p), np.zeros((cols, matrix.shape[0] - cols))])
+    return s @ np.linalg.inv(q)
+
+
+def dss2ss(gdss: DescriptorStateSpace, toler: float = 1e-14) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Convert a descriptor model to explicit state space.
+
+    Mirrors MATLAB ``SimplusGT.dss2ss`` for diagonal ``E``. Dynamic states are
+    those with ``|E_ii| >= 1e-12``; algebraic states are eliminated.
+    """
+
+    if gdss.nx == 0:
+        return gdss.A.copy(), gdss.B.copy(), gdss.C.copy(), gdss.D.copy()
+
+    e = np.asarray(gdss.E, dtype=float)
+    if e.shape != (gdss.nx, gdss.nx) or not np.allclose(e, np.diag(np.diag(e)), atol=toler):
+        # Fall back to a dense solve when E is nonsingular and non-diagonal.
+        return (
+            np.linalg.solve(gdss.E, gdss.A),
+            np.linalg.solve(gdss.E, gdss.B),
+            gdss.C.copy(),
+            gdss.D.copy(),
+        )
+
+    diag_e = np.diag(e)
+    index1 = np.flatnonzero(np.abs(diag_e) >= 1e-12)
+    index2 = np.flatnonzero(np.abs(diag_e) < 1e-12)
+    a = np.asarray(gdss.A, dtype=float)
+    b = np.asarray(gdss.B, dtype=float)
+    c = np.asarray(gdss.C, dtype=float)
+    d = np.asarray(gdss.D, dtype=float)
+
+    if index1.size == 0:
+        # Purely algebraic descriptor system: solve 0 = A x + B u for the map u->y.
+        if index2.size == 0:
+            return a.copy(), b.copy(), c.copy(), d.copy()
+        a22 = a[np.ix_(index2, index2)]
+        inv_a22 = np.linalg.inv(a22)
+        return (
+            np.zeros((0, 0)),
+            np.zeros((0, gdss.nu)),
+            np.zeros((gdss.ny, 0)),
+            d - c[:, index2] @ inv_a22 @ b[index2, :],
+        )
+
+    a11 = a[np.ix_(index1, index1)]
+    a12 = a[np.ix_(index1, index2)]
+    a21 = a[np.ix_(index2, index1)]
+    a22 = a[np.ix_(index2, index2)]
+    b1 = b[index1, :]
+    b2 = b[index2, :]
+    c1 = c[:, index1]
+    c2 = c[:, index2]
+    e1 = np.diag(diag_e[index1])
+
+    if index2.size == 0:
+        inv_e1 = np.linalg.inv(e1)
+        return inv_e1 @ a11, inv_e1 @ b1, c1.copy(), d.copy()
+
+    if np.linalg.matrix_rank(a22, tol=toler) == a22.shape[0]:
+        inv_a22 = np.linalg.inv(a22)
+        a_ = a11 - a12 @ inv_a22 @ a21
+        b_ = b1 - a12 @ inv_a22 @ b2
+        c_ = c1 - c2 @ inv_a22 @ a21
+        d_ = d - c2 @ inv_a22 @ b2
+        inv_e1 = np.linalg.inv(e1)
+        return inv_e1 @ a_, inv_e1 @ b_, c_, d_
+
+    # Singular A22 path (MATLAB null-space reduction).
+    from scipy.linalg import null_space
+
+    n = null_space(a22.T).T
+    if n.size == 0:
+        raise np.linalg.LinAlgError("Unable to reduce singular algebraic block in dss2ss")
+    k = n @ a21 @ np.linalg.inv(e1)
+    a_21 = np.vstack([a21, k @ a11])
+    a_22 = np.vstack([a22, k @ a12])
+    b_2 = np.vstack([b2, k @ b1])
+    f = np.vstack([np.zeros((a22.shape[0], b2.shape[1])), n @ b2])
+    w = _left_inverse(a_22, toler)
+    ei = np.linalg.inv(e1)
+    a_ = ei @ (a11 - a12 @ w @ a_21)
+    b_ = ei @ (b1 - a12 @ w @ b_2)
+    bd = -ei @ a12 @ w @ f
+    c_ = c1 - c2 @ w @ a_21
+    d_ = d - c2 @ w @ b_2
+    dd = -c2 @ w @ f
+    a_[np.abs(a_) < toler] = 0.0
+    b_[np.abs(b_) < toler] = 0.0
+    c_[np.abs(c_) < toler] = 0.0
+    d_[np.abs(d_) < toler] = 0.0
+    if np.max(np.abs(bd)) >= toler or np.max(np.abs(dd)) >= toler:
+        raise ValueError("Descriptor system is improper and cannot be converted to state space")
+    return a_, b_, c_, d_
 
 
 def empty(inputs: int = 0, outputs: int = 0) -> DescriptorStateSpace:
@@ -214,27 +323,40 @@ def _vertical(rows: list[DescriptorStateSpace]) -> DescriptorStateSpace:
 
 
 def switch_inputs_outputs(g: DescriptorStateSpace, length: int) -> DescriptorStateSpace:
+    """Switch the leading ``length`` inputs/outputs, matching MATLAB ``DssSwitchInOut``."""
+
     if length > min(g.nu, g.ny):
         raise ValueError("Switch length exceeds input/output dimensions")
-    # Algebraic state xi represents the old output now exposed as an input.
     nx, nu, ny = g.nx, g.nu, g.ny
     l = length
+    b1 = g.B[:, :l] if nx else np.zeros((0, l))
+    b2 = g.B[:, l:] if nx else np.zeros((0, nu - l))
+    c1 = g.C[:l, :] if nx else np.zeros((l, 0))
+    c2 = g.C[l:, :] if nx else np.zeros((ny - l, 0))
+    d11 = g.D[:l, :l]
+    d12 = g.D[:l, l:]
+    d21 = g.D[l:, :l]
+    d22 = g.D[l:, l:]
+
     a = np.block([
-        [g.A, np.zeros((nx, l))],
-        [-g.C[:l, :], np.zeros((l, l))],
+        [g.A if nx else np.zeros((0, 0)), b1],
+        [-c1, -d11],
     ])
     b = np.vstack([
-        np.hstack([g.B[:, :l], g.B[:, l:]]),
-        np.hstack([-g.D[:l, :l], -g.D[:l, l:]]),
+        np.hstack([np.zeros((nx, l)), b2]),
+        np.hstack([np.eye(l), -d12]),
     ])
     c = np.block([
-        [-g.D[:l, :l] @ g.C[:l, :] if nx else np.zeros((l, nx)), np.eye(l)],
-        [g.C[l:, :], np.zeros((ny - l, l))],
+        [np.zeros((l, nx)), np.eye(l)],
+        [c2, d21],
     ])
-    d_top = np.hstack([np.eye(l) - g.D[:l, :l] @ g.D[:l, :l], -g.D[:l, l:]]) if l else np.zeros((0, nu))
-    d = np.vstack([d_top, np.hstack([g.D[l:, :l], g.D[l:, l:]])])
-    e = block_diag(g.E, np.zeros((l, l)))
-    states = list(g.states) + [f"xi_{idx + 1}" for idx in range(l)]
+    d = np.block([
+        [np.zeros((l, l)), np.zeros((l, nu - l))],
+        [np.zeros((ny - l, l)), d22],
+    ])
+    e = block_diag(g.E if nx else np.zeros((0, 0)), np.zeros((l, l)))
+    base_states = list(g.states) if g.states else [f"x{idx + 1}" for idx in range(nx)]
+    states = base_states + [f"xi_{idx + 1}" for idx in range(l)]
     inputs = list(g.outputs[:l]) + list(g.inputs[l:]) if g.inputs and g.outputs else []
     outputs = list(g.inputs[:l]) + list(g.outputs[l:]) if g.inputs and g.outputs else []
     return DescriptorStateSpace(a, b, c, d, e, states, inputs, outputs)
@@ -254,7 +376,7 @@ def inverse(g: DescriptorStateSpace) -> DescriptorStateSpace:
     c = np.hstack([np.zeros((n, nx)), np.eye(n)])
     d = np.zeros((n, n))
     e = block_diag(g.E, np.zeros((n, n)))
-    states = list(g.states) + [f"inv_u_{idx + 1}" for idx in range(n)]
+    states = list(g.states) + [f"inv_u_{idx + 1}" for idx in range(n)] if g.states else []
     return DescriptorStateSpace(a, b, c, d, e, states, list(g.outputs), list(g.inputs))
 
 

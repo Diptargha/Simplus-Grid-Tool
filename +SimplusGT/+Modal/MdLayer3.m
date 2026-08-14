@@ -15,6 +15,7 @@
 function Layer3Result = MdLayer3(Residue,ZmVal,Mode_Hz,ApparatusType,...
                 ApparatusSelL3All,Para,ApparatusPowerFlow,Ts,ApparatusBus,ListBus)
 
+Advance = evalin('base', 'Advance');
 ApparatusSelNum=length(ApparatusSelL3All);
 Mode_rad = Mode_Hz*2*pi;
 for ApparatusCount = 1:ApparatusSelNum
@@ -33,7 +34,7 @@ for ApparatusCount = 1:ApparatusSelNum
    
         [~,GmDSS_Cell_New,~,~,~,~,~,~,~] ...
         = SimplusGT.Toolbox.ApparatusModelCreate(ApparatusBus{ApparatusSelL3},ApparatusType{ApparatusSelL3},...
-                            ApparatusPowerFlow{ApparatusSelL3},ParaNew,Ts,ListBus);
+                            ApparatusPowerFlow{ApparatusSelL3},ParaNew,Ts,ListBus,Advance);
      
         ZmValNew = SimplusGT.Modal.ApparatusImpedanceCal(GmDSS_Cell_New, Mode_rad, ApparatusType{ApparatusSelL3});
         

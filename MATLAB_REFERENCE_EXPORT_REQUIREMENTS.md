@@ -48,6 +48,19 @@ ExportMatlabReference('Results/ieee14_reference.mat', ...
 
 The exporter saves MATLAB v7 `.mat` by default because Python can read it with `scipy.io.loadmat`. Use `'UseV73', true` only for very large reference files, since MATLAB v7.3 uses HDF5 and needs a different Python reader.
 
+## Greybox Excel export (Python workbook parity)
+
+For spreadsheet comparison with Python `export_greybox_excel()`, run after `Main()`:
+
+```matlab
+ExportGreyboxExcel('Results/IEEE_14Bus_greybox_matlab.xlsx', ...
+    'FrequencyHz', logspace(-1, 3, 80));
+```
+
+This writes the same sheets as Python (`Summary`, `Channels`, `Channels_Zsys`, `Ysys`, `Zsys`, wide MagPhase/RealImag tables). Frequency sampling uses `SimplusGT.sampleImpedanceFrequencyResponse` (algebraic \(Z_{\mathrm{sys}}=(G_m+Y_{\mathrm{bus}})^{-1}\)), shared with `ExportMatlabReference.m`.
+
+Compare the `Zsys` long sheets with `tests/test_greybox_excel_matlab_parity.py`.
+
 Manual save command, if needed:
 
 ```matlab

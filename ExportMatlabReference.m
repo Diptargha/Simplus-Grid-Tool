@@ -272,6 +272,9 @@ if isfield(ref, 'ModeSelect') && baseExists('NumApparatus') && baseExists('Appar
 end
 
 %% Sensitivity references
+% Prefer algebraic Z reconstruction for modes (WholeSysZ_cal uses Control
+% Toolbox inv(Gm), which is often rank-deficient). Fall back to WholeSysZ_cal
+% only when a finite state-space ZminSS is available.
 if isfield(ref, 'ModeSelect') && baseExists('ObjGm') && baseExists('ObjYbusDss') && ...
         baseExists('PortI') && baseExists('PortV')
     try
@@ -279,7 +282,25 @@ if isfield(ref, 'ModeSelect') && baseExists('ObjGm') && baseExists('ObjYbusDss')
         ObjYbusDss = baseValue('ObjYbusDss');
         PortI = baseValue('PortI');
         PortV = baseValue('PortV');
-        ZminSS = SimplusGT.WholeSysZ_cal(ObjGm, ObjYbusDss, PortI, PortV);
+        ZminSS = [];
+        warning_state = warning('off', 'MATLAB:nearlySingularMatrix');
+        warning_state2 = warning('off', 'Control:transformation:InverseNonFinite');
+        try
+            ZminSS = SimplusGT.WholeSysZ_cal(ObjGm, ObjYbusDss, PortI, PortV);
+            if ~all(isfinite(ZminSS.A(:))) || ~all(isfinite(ZminSS.D(:)))
+                ZminSS = [];
+            end
+        catch
+            ZminSS = [];
+        end
+        warning(warning_state);
+        warning(warning_state2);
+
+        if isempty(ZminSS)
+            error(['WholeSysZ_cal did not produce a finite ZminSS. ', ...
+                'Sensitivity Layer references require the Control Toolbox inverse path; ', ...
+                'use Python greybox sensitivity instead.']);
+        end
         ref.ZminSS = packStateSpace(ZminSS);
 
         [~, ZD] = eig(ZminSS.A);
@@ -288,6 +309,7 @@ if isfield(ref, 'ModeSelect') && baseExists('ObjGm') && baseExists('ObjYbusDss')
         ref.ZMode_rad = ZMode_rad;
         ref.ZMode_Hz = ZMode_Hz;
 
+        % SensitivityCal expects a scalar complex frequency (rad/s).
         sensitivity = computeSensitivityReferences(ZminSS, ZMode_rad, ZMode_Hz, ref.Mode, ref.ModeSelect, ObjYbusDss);
         ref.SensMatrix = sensitivity.SensMatrix;
         ref.SensMat_exp = sensitivity.SensMat_exp;
@@ -318,7 +340,7 @@ try
         YsysModel = [];
     end
     if ~isempty(YsysModel)
-        ref.Ysys_values = sampleFrequencyResponse(YsysModel, ref.s_values);
+        ref.Ysys_values = SimplusGT.sampleFrequencyResponse(YsysModel, ref.s_values);
     else
         warnings{end + 1} = 'YsysDss/ObjYsysDss was not found; Ysys_values was not exported.';
     end
@@ -327,12 +349,27 @@ catch err
 end
 
 try
-    if exist('ZminSS', 'var')
-        ref.Zsys_values = sampleFrequencyResponse(ZminSS, ref.s_values);
-    elseif baseExists('ObjGm') && baseExists('ObjYbusDss') && baseExists('PortI') && baseExists('PortV')
-        ZsysModel = SimplusGT.WholeSysZ_cal(baseValue('ObjGm'), baseValue('ObjYbusDss'), baseValue('PortI'), baseValue('PortV'));
-        ref.ZminSS = packStateSpace(ZsysModel);
-        ref.Zsys_values = sampleFrequencyResponse(ZsysModel, ref.s_values);
+    % Zsys(s) = inv(Gm(s) + Ybus(s)) at each frequency.
+    % Do NOT use Control Toolbox inv() on the apparatus DSS: Gm is often
+    % rank-deficient as a transfer-function inverse (non-finite inv model).
+    if baseExists('ObjGm') && baseExists('ObjYbusDss') && baseExists('PortI') && baseExists('PortV')
+        ObjGmRaw = baseValue('ObjGm');
+        ObjYbusRaw = baseValue('ObjYbusDss');
+        PortI = baseValue('PortI');
+        PortV = baseValue('PortV');
+        [~, GmDssRaw] = ObjGmRaw.GetDSS(ObjGmRaw);
+        [~, YbusDssRaw] = ObjYbusRaw.GetDSS(ObjYbusRaw);
+        GmTrim = GmDssRaw(PortI, PortV);
+        ref.Zsys_values = SimplusGT.sampleImpedanceFrequencyResponse(GmTrim, YbusDssRaw, ref.s_values);
+        if ~all(isfinite(ref.Zsys_values(:)))
+            warnings{end + 1} = 'Zsys_values contains non-finite entries after algebraic sampling.';
+        end
+        % WholeSysZ_cal uses inv(GmDSS), which warns/fails when Gm is rank
+        % deficient. Keep Zsys_values as the source of truth for Python tests.
+        warnings{end + 1} = ['ZminSS was not packed via WholeSysZ_cal because Control Toolbox ', ...
+            'inv(Gm) is rank-deficient for this case; use Zsys_values instead.'];
+    elseif exist('ZminSS', 'var')
+        ref.Zsys_values = SimplusGT.sampleFrequencyResponse(ZminSS, ref.s_values);
     else
         warnings{end + 1} = 'Could not build Zsys; Zsys_values was not exported.';
     end
@@ -522,14 +559,5 @@ for modei = 1:modeCount
     sensitivity.SensLayer2{modei} = SensLayer2;
     sensitivity.Layer12{modei} = Layer12;
     sensitivity.SensitivityModeIndex(modei) = Ek;
-end
-end
-
-function values = sampleFrequencyResponse(model, sValues)
-first = evalfr(model, sValues(1));
-values = zeros(size(first, 1), size(first, 2), numel(sValues));
-values(:, :, 1) = first;
-for i = 2:numel(sValues)
-    values(:, :, i) = evalfr(model, sValues(i));
 end
 end

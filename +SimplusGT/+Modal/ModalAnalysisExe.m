@@ -39,8 +39,8 @@ SimplusGT.Modal.DataCheck(AxisSel, ApparatusSelL12, ModeSelAll, ApparatusSelL3Al
 
 ModeSelNum = length(ModeSelAll);
 %get ResidueAll, ZmValAll.
-[MdMode,ResidueAll,ZmValAll,~,ModeDSS,Phi_DSS, IndexSS]=...
-    SimplusGT.Modal.SSCal(GminSS, N_Apparatus, ApparatusType, ModeSelAll, GmDSS_Cell, GsysDSS, ApparatusInputStr, ApparatusOutputStr);
+[MdMode,ResidueAll,ZmValAll]=...
+    SimplusGT.Modal.SSCal(GminSS, N_Apparatus, ApparatusType, ModeSelAll, GmDSS_Cell, ApparatusInputStr, ApparatusOutputStr);
 
 %% Impedance Participation Factor
 %Analysis.
@@ -56,7 +56,7 @@ for modei=1:ModeSelNum
     if Layer12Enable ==1
         fprintf('Calculating Modal Analysis Layer1&2 and plotting the results...\n')
         [Layer1, Layer2] = SimplusGT.Modal.MdLayer12(Residue,ZmVal,N_Apparatus,ApparatusBus,...
-            ApparatusType,modei,ApparatusSelL12,FreqSel,MdMode(ModeSelAll(modei)));
+            ApparatusType,ApparatusSelL12);
         MdLayer1(modei).mode = [num2str(FreqSel),'~Hz'];
         MdLayer2(modei).mode = [num2str(FreqSel),'~Hz'];
         for count = 1: length(ApparatusSelL12)
@@ -85,8 +85,9 @@ end
 %% State Participation Factor
 if StatePFEnable == 1
     fprintf('Calculating state-space participation factor...\n')
-%Phi_DSS;
-%StateSel_DSS;
+[GsysSS, IndexSS] = SimplusGT.dss2ss(GsysDSS);
+[Phi_DSS, D_DSS] = eig(GsysSS.A);
+ModeDSS = diag(D_DSS)/(2*pi);
 ApparatusStateTotal = 0;
 for Di=1:length(ApparatusStateStr)
     ApparatusStateTotal = ApparatusStateTotal + length(ApparatusStateStr{Di});
@@ -135,10 +136,25 @@ end
 % Yre: a rearranged admittance: diagonal---node element admittance;
 %                               off-diagonal------branch element admittance
 MdSensResult=[];
+ZminSS = [];
 
 if SensEnable == 1 % if enable
 fprintf('Calculating whole-system eigenvalue sensitivity...\n')
 ZminSS = SimplusGT.WholeSysZ_cal(GmObj,YbusObj,Port_i, Port_v);
+% IEEE 14 and similar RL networks often yield an improper/non-finite
+% Control Toolbox inverse; skip sensitivity rather than abort ModalAnalysis.
+if isempty(ZminSS) || size(ZminSS.A,1) == 0
+    warning('SimplusGT:Modal:NoProperZsys', [ ...
+        'Whole-system Zsys has no proper finite state-space realization for this case; ', ...
+        'sensitivity layers are skipped. Apparatus Layer 1/2/3 and State-PF results are still available. ', ...
+        'Use frequency-sampled Zsys (ExportGreyboxExcel / Python greybox) for impedance spectra.']);
+    SensEnable = 0;
+    ZminSS = [];
+    MdSensResult = [];
+end
+end
+
+if SensEnable == 1
 [~,D]=eig(ZminSS.A);
 ZMode_rad=diag(D);
 ZMode_Hz=ZMode_rad/2/pi;

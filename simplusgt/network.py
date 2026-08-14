@@ -65,8 +65,10 @@ def _ac_branch(from_bus: int, to_bus: int, r: float, x: float, b: float, g: floa
         )
     if r != 0 and not np.isinf(r):
         raise ValueError(f"Ac self branch {from_bus}{to_bus} contains R")
+    # Match MATLAB YbusCalcDss: build self-branch impedance Z_GC, then switch to Y.
+    # Even pure-G branches use Z=inv(G) followed by DssSwitchInOut (adds algebraic xi states).
     if b == 0:
-        base = _static(np.linalg.inv(np.array([[g, 0.0], [0.0, g]])))
+        z_gc = _static(np.linalg.inv(np.array([[g, 0.0], [0.0, g]])))
     else:
         capacitance = b / w
         z_gc = DescriptorStateSpace(
@@ -77,7 +79,7 @@ def _ac_branch(from_bus: int, to_bus: int, r: float, x: float, b: float, g: floa
             np.eye(2),
             [f"vd{from_bus}-{to_bus}", f"vq{from_bus}-{to_bus}"],
         )
-        base = switch_inputs_outputs(z_gc, 2)
+    base = switch_inputs_outputs(z_gc, 2)
     if np.isinf(x):
         return base
     if x == 0:
@@ -115,17 +117,19 @@ def _dc_branch(from_bus: int, to_bus: int, r: float, x: float, b: float, g: floa
         )
     if not (np.isinf(r) or np.isinf(x)):
         raise ValueError(f"Dc self branch {from_bus}{to_bus} contains R and/or L")
+    # Match MATLAB: impedance form then DssSwitchInOut even for pure-G self branches.
     if b == 0:
-        return _static([[1 / g]])
-    capacitance = b / w
-    z_gc = DescriptorStateSpace(
-        np.array([[-g / capacitance]]),
-        np.array([[1 / capacitance]]),
-        np.array([[1.0]]),
-        np.array([[0.0]]),
-        np.array([[1.0]]),
-        [f"v{from_bus}-{to_bus}"],
-    )
+        z_gc = _static([[1 / g]])
+    else:
+        capacitance = b / w
+        z_gc = DescriptorStateSpace(
+            np.array([[-g / capacitance]]),
+            np.array([[1 / capacitance]]),
+            np.array([[1.0]]),
+            np.array([[0.0]]),
+            np.array([[1.0]]),
+            [f"v{from_bus}-{to_bus}"],
+        )
     return switch_inputs_outputs(z_gc, 1)
 
 

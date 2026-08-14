@@ -30,6 +30,10 @@ class RunResult:
     whole_system_dss: DescriptorStateSpace
     whole_system_ss: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None
     eigenvalues: np.ndarray
+    port_v: list[int] = field(default_factory=list)
+    port_i: list[int] = field(default_factory=list)
+    bus_port_v: list[list[int]] = field(default_factory=list)
+    bus_port_i: list[list[int]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -86,16 +90,20 @@ def run_case_data(case: CaseData) -> RunResult:
         app_pf = _apparatus_power_flow(pf_new, buses)
         model = create_apparatus_model(buses, app_type, app_pf, params, ts)
         app_models.append(model)
+        for message in getattr(model, "model_warnings", []) or []:
+            warnings.append(message)
     gm = link_apparatus(app_models)
     net = network_dss(buses_new, lines_new, wbase)
-    gsys, _, _, _, _ = _connect_gm_zbus(gm, net.zbus, int(np.max(buses_new[:, 0])))
+    gsys, port_v, port_i, bus_port_v, bus_port_i = _connect_gm_zbus(gm, net.zbus, int(np.max(buses_new[:, 0])))
     try:
         whole_ss = gsys.to_state_space()
         eigenvalues = np.linalg.eigvals(whole_ss[0]) if whole_ss[0].size else np.array([], dtype=complex)
-    except np.linalg.LinAlgError:
-        warnings.append("Whole-system E matrix is singular; using generalized eigenvalues only")
+        eigenvalues = eigenvalues[np.isfinite(eigenvalues)]
+    except (np.linalg.LinAlgError, ValueError) as exc:
+        warnings.append(f"Whole-system DSS-to-SS conversion failed ({exc}); using generalized eigenvalues")
         whole_ss = None
         eigenvalues = gsys.eigenvalues()
+        eigenvalues = eigenvalues[np.isfinite(eigenvalues)]
     return RunResult(
         case=case,
         netlists=netlists,
@@ -109,5 +117,9 @@ def run_case_data(case: CaseData) -> RunResult:
         whole_system_dss=gsys,
         whole_system_ss=whole_ss,
         eigenvalues=eigenvalues,
+        port_v=port_v,
+        port_i=port_i,
+        bus_port_v=bus_port_v,
+        bus_port_i=bus_port_i,
         warnings=warnings,
     )

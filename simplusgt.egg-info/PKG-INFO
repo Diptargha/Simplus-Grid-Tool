@@ -1,8 +1,23 @@
+Metadata-Version: 2.4
+Name: simplusgt
+Version: 0.1.0
+Summary: Python migration of the non-Simulink Simplus Grid Tool pipeline
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: license
+Requires-Dist: numpy>=1.24
+Requires-Dist: scipy>=1.10
+Requires-Dist: pandas>=2.0
+Requires-Dist: openpyxl>=3.1
+Requires-Dist: networkx>=3.0
+Requires-Dist: matplotlib>=3.7
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Dynamic: license-file
+
 # Simplus Grid Tool (Version: v2026-Mar-9)
 
 Simplus Grid Tool (SimplusGT in short) is an open-source tool for dynamic analysis and time-domain simulation of power systems (large-scale 100+ bus systems, SG-IBR-composite systems, AC or DC or hybrid AC-DC systems, HVDC systems, etc). The tool is based on Matlab/Simulink.
-
-A **Python** port of the non-Simulink analysis pipeline is also available — see [PYTHON.md](PYTHON.md) for install notes and [Documentations/PythonUserManual.md](Documentations/PythonUserManual.md) for the full Python user guide.
 
 ![](https://raw.githubusercontent.com/Future-Power-Networks/Simplus-Grid-Tool/master/Documentations/Figures/SoftwareExample.png)
 

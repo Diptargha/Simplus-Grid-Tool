@@ -1,4 +1,4 @@
-"""Export run results to dashboard-ready JSON."""
+"""Export run results to dashboard-ready JSON and greybox Excel workbooks."""
 
 from __future__ import annotations
 
@@ -410,6 +410,301 @@ def export_greybox_json(
     with final_output.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, allow_nan=False)
     return final_output
+
+
+def export_greybox_excel(result: GreyboxResult, output_path: str | Path) -> Path:
+    """Write greybox Ysys/Zsys samples, eigenvalues, State-PF, and Layer tables.
+
+    Sheets:
+    - ``Summary`` — case / grid / mode metadata
+    - ``Channels`` — port index map for Ysys/Zsys
+    - ``Ysys`` / ``Zsys`` — long-form frequency response (Mag, Phase, Real, Imag)
+    - ``Ysys_MagPhase`` / ``Zsys_MagPhase`` — wide Mag/Phase when column count fits Excel
+    - ``Ysys_RealImag`` / ``Zsys_RealImag`` — wide Real/Imag when column count fits Excel
+    - ``Eigenvalues`` — whole-system finite eigenvalues (rad/s and Hz)
+    - ``StatePF`` — state participation factors (absolute, normalized to max per mode)
+    - ``Layer1`` / ``Layer2`` / ``Layer3`` — apparatus modal layers (if computed)
+    - ``Sens_Layer12`` — sensitivity Layer 1/2 (if computed)
+    """
+
+    import pandas as pd
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    summary = pd.DataFrame(
+        [
+            {"Property": "case_path", "Value": str(result.config.case_path)},
+            {"Property": "bus_count", "Value": int(result.run_result.netlists.buses.shape[0])},
+            {"Property": "line_count", "Value": int(result.run_result.netlists.lines.shape[0])},
+            {"Property": "apparatus_count", "Value": int(len(result.run_result.case.Apparatus))},
+            {"Property": "layers", "Value": ",".join(result.config.layers.names())},
+            {"Property": "modes", "Value": ",".join(str(m) for m in result.config.modes)},
+            {"Property": "freq_count", "Value": int(result.impedance.frequencies_hz.size)},
+            {
+                "Property": "freq_min_hz",
+                "Value": float(np.min(result.impedance.frequencies_hz)) if result.impedance.frequencies_hz.size else None,
+            },
+            {
+                "Property": "freq_max_hz",
+                "Value": float(np.max(result.impedance.frequencies_hz)) if result.impedance.frequencies_hz.size else None,
+            },
+            {"Property": "ysys_sampled", "Value": bool(result.admittance.sampled)},
+            {"Property": "zsys_sampled", "Value": bool(result.impedance.sampled)},
+            {"Property": "warnings", "Value": " | ".join(result.warnings)},
+        ]
+    )
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        summary.to_excel(writer, sheet_name="Summary", index=False)
+        _transfer_channel_table(result.admittance, "Ysys").to_excel(writer, sheet_name="Channels", index=False)
+        # Append Zsys channels under the same sheet layout via a second Channels_Zsys sheet.
+        _transfer_channel_table(result.impedance, "Zsys").to_excel(writer, sheet_name="Channels_Zsys", index=False)
+
+        for name, transfer in (("Ysys", result.admittance), ("Zsys", result.impedance)):
+            _transfer_long_table(transfer).to_excel(writer, sheet_name=name, index=False)
+            wide_mag = _transfer_wide_mag_phase(transfer)
+            wide_ri = _transfer_wide_real_imag(transfer)
+            if wide_mag is not None:
+                wide_mag.to_excel(writer, sheet_name=_sheet_name(f"{name}_MagPhase"), index=False)
+            if wide_ri is not None:
+                wide_ri.to_excel(writer, sheet_name=_sheet_name(f"{name}_RealImag"), index=False)
+
+        eig_df = _eigenvalues_dataframe(result.run_result.eigenvalues)
+        if not eig_df.empty:
+            eig_df.to_excel(writer, sheet_name="Eigenvalues", index=False)
+
+        state_pf_df = _state_pf_dataframe(result.run_result)
+        if not state_pf_df.empty:
+            state_pf_df.to_excel(writer, sheet_name="StatePF", index=False)
+
+        layer1_rows: list[dict[str, Any]] = []
+        layer2_rows: list[dict[str, Any]] = []
+        layer3_rows: list[dict[str, Any]] = []
+        for mode in result.modes:
+            eig = complex(mode.eigenvalue)
+            eig_hz = eig / (2 * np.pi)
+            eig_cols = {
+                "mode_index": mode.mode_index,
+                "eigenvalue_real_rad_s": float(np.real(eig)),
+                "eigenvalue_imag_rad_s": float(np.imag(eig)),
+                "eigenvalue_real_hz": float(np.real(eig_hz)),
+                "eigenvalue_imag_hz": float(np.imag(eig_hz)),
+            }
+            for item in mode.layer1:
+                layer1_rows.append(
+                    {
+                        **eig_cols,
+                        **{k: item.get(k) for k in ("apparatus_index", "label", "value", "normalized")},
+                    }
+                )
+            for item in mode.layer2:
+                layer2_rows.append(
+                    {
+                        **eig_cols,
+                        **{
+                            k: item.get(k)
+                            for k in (
+                                "apparatus_index",
+                                "label",
+                                "real",
+                                "imag",
+                                "real_normalized",
+                                "imag_normalized",
+                            )
+                        },
+                    }
+                )
+            for item in mode.layer3:
+                d_rad = complex(item.get("d_lambda_rad", 0.0))
+                d_hz = complex(item.get("d_lambda_hz", 0.0))
+                d_pu = complex(item.get("d_lambda_pu_hz", 0.0))
+                layer3_rows.append(
+                    {
+                        **eig_cols,
+                        "apparatus_index": item.get("apparatus_index"),
+                        "label": item.get("label"),
+                        "parameter": item.get("parameter"),
+                        "d_lambda_rad_real": float(np.real(d_rad)),
+                        "d_lambda_rad_imag": float(np.imag(d_rad)),
+                        "d_lambda_hz_real": float(np.real(d_hz)),
+                        "d_lambda_hz_imag": float(np.imag(d_hz)),
+                        "d_lambda_pu_hz_real": float(np.real(d_pu)),
+                        "d_lambda_pu_hz_imag": float(np.imag(d_pu)),
+                    }
+                )
+        if layer1_rows:
+            pd.DataFrame(layer1_rows).to_excel(writer, sheet_name="Layer1", index=False)
+        if layer2_rows:
+            pd.DataFrame(layer2_rows).to_excel(writer, sheet_name="Layer2", index=False)
+        if layer3_rows:
+            pd.DataFrame(layer3_rows).to_excel(writer, sheet_name="Layer3", index=False)
+
+        sens_rows: list[dict[str, Any]] = []
+        for sens in result.sensitivity:
+            eig = complex(sens.eigenvalue)
+            for item in sens.layer12:
+                sens_rows.append(
+                    {
+                        "mode_index": sens.mode_index,
+                        "eigenvalue_real_rad_s": float(np.real(eig)),
+                        "eigenvalue_imag_rad_s": float(np.imag(eig)),
+                        **item,
+                    }
+                )
+        if sens_rows:
+            pd.DataFrame(sens_rows).to_excel(writer, sheet_name="Sens_Layer12", index=False)
+
+    return output_path
+
+
+def _eigenvalues_dataframe(eigenvalues: np.ndarray):
+    import pandas as pd
+
+    values = np.asarray(eigenvalues, dtype=complex).ravel()
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return pd.DataFrame()
+    order = np.lexsort((np.abs(np.imag(values)), np.real(values)))
+    values = values[order]
+    rows = []
+    for idx, lam in enumerate(values):
+        denom = abs(lam)
+        zeta = None if denom == 0 else float(-np.real(lam) / denom)
+        lam_hz = lam / (2 * np.pi)
+        rows.append(
+            {
+                "mode_index": idx,
+                "real_rad_s": float(np.real(lam)),
+                "imag_rad_s": float(np.imag(lam)),
+                "real_hz": float(np.real(lam_hz)),
+                "imag_hz": float(np.imag(lam_hz)),
+                "frequency_hz": float(abs(np.imag(lam_hz))),
+                "damping_ratio": zeta,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _state_pf_dataframe(run_result: RunResult):
+    import pandas as pd
+
+    modes = descriptor_modes(run_result.whole_system_dss, max_states_per_mode=None)
+    rows: list[dict[str, Any]] = []
+    for mode in modes:
+        eig = complex(mode.eigenvalue)
+        eig_hz = complex(mode.eigenvalue_hz)
+        for state_index, (state, factor) in enumerate(mode.state_participation):
+            rows.append(
+                {
+                    "mode_index": mode.mode_index,
+                    "real_rad_s": float(np.real(eig)),
+                    "imag_rad_s": float(np.imag(eig)),
+                    "real_hz": float(np.real(eig_hz)),
+                    "imag_hz": float(np.imag(eig_hz)),
+                    "frequency_hz": float(mode.frequency_hz),
+                    "damping_ratio": mode.damping_ratio,
+                    "state_index": state_index,
+                    "state": state,
+                    "pf_abs": float(factor),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _sheet_name(name: str) -> str:
+    cleaned = re.sub(r"[\[\]\*\:\?\/\\]", "_", name)
+    return cleaned[:31]
+
+
+def _safe_header(text: str) -> str:
+    cleaned = re.sub(r"[^\w\-]+", "_", str(text)).strip("_")
+    return cleaned[:40] or "ch"
+
+
+def _transfer_channel_table(transfer: Any, prefix: str):
+    import pandas as pd
+
+    rows = []
+    for row, output in enumerate(transfer.output_labels):
+        for col, input_label in enumerate(transfer.input_labels):
+            rows.append(
+                {
+                    "transfer": prefix,
+                    "row": row,
+                    "col": col,
+                    "output": output,
+                    "input": input_label,
+                    "channel": f"{output}/{input_label}",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _transfer_long_table(transfer: Any):
+    import pandas as pd
+
+    freq = np.asarray(transfer.frequencies_hz, dtype=float).ravel()
+    values = np.asarray(transfer.values, dtype=complex)
+    rows: list[dict[str, Any]] = []
+    for f_idx, f_hz in enumerate(freq):
+        matrix = values[f_idx]
+        for row, output in enumerate(transfer.output_labels):
+            for col, input_label in enumerate(transfer.input_labels):
+                z = complex(matrix[row, col])
+                rows.append(
+                    {
+                        "Frequency_Hz": float(f_hz),
+                        "Output": output,
+                        "Input": input_label,
+                        "Row": row,
+                        "Col": col,
+                        "Mag": float(np.abs(z)),
+                        "Phase_deg": float(np.angle(z) * 180.0 / np.pi),
+                        "Real": float(np.real(z)),
+                        "Imag": float(np.imag(z)),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def _transfer_wide_mag_phase(transfer: Any):
+    import pandas as pd
+
+    n_out = len(transfer.output_labels)
+    n_in = len(transfer.input_labels)
+    # Excel column limit is 16384; reserve one for frequency.
+    if 1 + 2 * n_out * n_in > 16384:
+        return None
+    freq = np.asarray(transfer.frequencies_hz, dtype=float).ravel()
+    values = np.asarray(transfer.values, dtype=complex)
+    data: dict[str, Any] = {"Frequency_Hz": freq}
+    for row, output in enumerate(transfer.output_labels):
+        for col, input_label in enumerate(transfer.input_labels):
+            channel = values[:, row, col]
+            tag = _safe_header(f"{output}__{input_label}")
+            data[f"Mag_{tag}"] = np.abs(channel)
+            data[f"Phase_{tag}"] = np.angle(channel) * 180.0 / np.pi
+    return pd.DataFrame(data)
+
+
+def _transfer_wide_real_imag(transfer: Any):
+    import pandas as pd
+
+    n_out = len(transfer.output_labels)
+    n_in = len(transfer.input_labels)
+    if 1 + 2 * n_out * n_in > 16384:
+        return None
+    freq = np.asarray(transfer.frequencies_hz, dtype=float).ravel()
+    values = np.asarray(transfer.values, dtype=complex)
+    data: dict[str, Any] = {"Frequency_Hz": freq}
+    for row, output in enumerate(transfer.output_labels):
+        for col, input_label in enumerate(transfer.input_labels):
+            channel = values[:, row, col]
+            tag = _safe_header(f"{output}__{input_label}")
+            data[f"Real_{tag}"] = np.real(channel)
+            data[f"Imag_{tag}"] = np.imag(channel)
+    return pd.DataFrame(data)
 
 
 def _json_safe_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

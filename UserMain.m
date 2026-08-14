@@ -9,7 +9,7 @@
 clear all; clc; close all; 
 
 %% User data
-UserDataName = 'UserData';      % Default 4-bus system
+% UserDataName = 'UserData';      % Default 4-bus system
 
 % Example power systems in "Examples" folder:
 %
@@ -22,7 +22,7 @@ UserDataName = 'UserData';      % Default 4-bus system
 % UserDataName = 'PV_GflInfiniteBus';            % Single Photovoltaic(GFL) and infinite bus
 % UserDataName = 'WtGfmInfiniteBus';   	        % Single grid-forming wind turbine and infinite bus
 % UserDataName = 'WtGflInfiniteBus';   	        % Single grid-following wind turbine and infinite bus
-% UserDataName = 'IEEE_14Bus';
+ UserDataName = 'IEEE_14Bus';
 % UserDataName = 'IEEE_30Bus';
 % UserDataName = 'IEEE_57Bus';
 % UserDataName = 'AU14Gen_59Bus';
@@ -51,7 +51,12 @@ cd(fileparts(mfilename('fullpath')));
 UserDataType = 1;
 
 %% Run toolbox
-SimplusGT.Toolbox.Main();  
+SimplusGT.Toolbox.Main();
+
+% Optional: export Ysys/Zsys to Excel (Python-compatible greybox workbook).
+% Eigenvalues from GsysSs; StatePF/Layer sheets when MdStatePF/MdLayer* exist
+% (run ModalAnalysis first for StatePF and Layers).
+ExportGreyboxExcel('Results/IEEE_14Bus_greybox.xlsx', 'FrequencyHz', logspace(-1, 3, 80));  
 
 %% Matlab app
 if 0; ModalAnalysisAPP; end      % Modal analysis

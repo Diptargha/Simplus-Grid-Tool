@@ -236,7 +236,8 @@ def run_greybox_case(case_path: str | Path, config: GreyboxConfig | None = None,
 def run_greybox(config: GreyboxConfig) -> GreyboxResult:
     run_result = run_case(config.case_path)
     warnings = list(run_result.warnings)
-    admittance = _sample_whole_system_admittance(run_result.whole_system_dss, config)
+    ysys_model = run_result.whole_system_dss.truncate(run_result.port_i, run_result.port_v)
+    admittance = _sample_whole_system_admittance(ysys_model, config)
     impedance_bundle = whole_system_impedance_bundle(run_result)
     impedance = _sample_whole_system_impedance(impedance_bundle, config)
     modes = _mode_results(run_result, config, warnings) if config.layers.needs_modes else []
@@ -296,11 +297,14 @@ def _sample_whole_system_impedance(bundle: GreyboxModelBundle, config: GreyboxCo
     values = []
     for freq in frequencies:
         s = 2j * np.pi * freq
-        zm = evalfr(bundle.zm, s)
+        # Zsys(s) = inv(Gm(s) + Ybus(s)). Equivalent to feedback(inv(Gm), Ybus)
+        # without forming a descriptor inverse, which is often rank-deficient.
+        gm = evalfr(bundle.gm_trim, s)
         ybus = evalfr(bundle.ybus, s)
-        values.append(np.linalg.solve(np.eye(zm.shape[0]) + zm @ ybus, zm))
+        values.append(np.linalg.solve(gm + ybus, np.eye(gm.shape[0], dtype=complex)))
     return WholeSystemAdmittanceResult(
         frequencies_hz=frequencies,
+        # Zsys maps current->voltage, so reuse the inverted-port labels from zm.
         input_labels=list(bundle.zm.inputs),
         output_labels=list(bundle.zm.outputs),
         values=np.asarray(values, dtype=complex),

@@ -105,7 +105,7 @@ def test_true_zsys_uses_current_inputs_and_voltage_outputs():
 def test_exported_zsys_matches_matlab_feedback_transfer_formula():
     result = run_greybox(GreyboxConfig(case_path=SG_CASE, frequency_grid=FrequencyGrid(values_hz=(1.0,))))
     bundle = whole_system_impedance_bundle(result.run_result)
-    zm = evalfr(bundle.zm, 2j * np.pi)
+    gm = evalfr(bundle.gm_trim, 2j * np.pi)
     ybus = evalfr(bundle.ybus, 2j * np.pi)
-    expected = np.linalg.solve(np.eye(zm.shape[0]) + zm @ ybus, zm)
+    expected = np.linalg.solve(gm + ybus, np.eye(gm.shape[0], dtype=complex))
     assert np.allclose(result.impedance.values[0], expected)
