@@ -176,6 +176,15 @@ Simplus-Grid-Tool/
 | `ENABLE_PLOT_ADMITTANCE_DQ_AXES` | dd / dq / qd / qq Bode (MATLAB Modal `BodeDraw`) |
 | `ENABLE_PLOT_GRID_STRENGTH` | Network layout coloured by bus admittance strength |
 | `ENABLE_PLOT_GREYBOX` | Ysys/Zsys Bode + Layer 1 pie / Layer 2 bars |
+| `ENABLE_HTML_DASHBOARD` | Interactive Plotly HTML dashboard (preferred for Layer 1/2/3) |
+
+With `ENABLE_HTML_DASHBOARD = True`, `UserMain` writes `Results/<case>_dashboard.html` and opens it in the browser when `SHOW_PLOTS` is set. Mode Layer 1/2/3 charts use hover tooltips and a mode dropdown so labels stay readable (Layer 3 appears when `ENABLE_GREYBOX_APP_LAYER3` / sensitivity Layer 3 produce data). Matplotlib PNGs are written only when `SAVE_PLOTS = True`.
+
+CLI equivalent:
+
+```bash
+simplusgt plot Examples/.../SgInfiniteBus.json --greybox --html-dashboard Results/SgInfiniteBus_dashboard.html --show
+```
 
 ### 6.3 Greybox layers (boolean flags)
 
@@ -631,6 +640,7 @@ The test loads `Results/IEEE_14Bus_greybox.xlsx` (Python) and `Results/IEEE_14Bu
 | `USER_DATA_NAME` | Short example name or file path |
 | `USER_DATA_TYPE` | Prefer `"json"` or `"excel"` when resolving short names |
 | `ENABLE_PLOT_*` | Fundamental MATLAB-style figures |
+| `ENABLE_HTML_DASHBOARD` | Write/open interactive Plotly HTML dashboard |
 | `ENABLE_GREYBOX` | Run greybox (also implied by greybox plot/export flags) |
 | `ENABLE_GREYBOX_*_LAYER*` | Boolean layer selection |
 | `GREYBOX_MODES` | `"auto"` or comma-separated 0-based indices |

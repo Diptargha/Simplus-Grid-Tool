@@ -98,6 +98,16 @@ def _ss_frequency_response(
     return values
 
 
+def _admittance_plot_freq_count(nx: int, requested: int = 500) -> int:
+    """Fewer Bode samples for large state-space models (dense FRF is O(n_freq*nx^3))."""
+
+    if nx >= 200:
+        return min(requested, 80)
+    if nx >= 80:
+        return min(requested, 160)
+    return requested
+
+
 def _bode_mag_phase(ax_mag, ax_phase, freq_hz: np.ndarray, values: np.ndarray, label: str) -> None:
     mag = np.abs(values)
     phase = np.unwrap(np.angle(values)) * 180 / np.pi
@@ -138,8 +148,10 @@ def plot_admittance_dq_axes(
         a, b, c, d = dss2ss(result.whole_system_dss)
     else:
         a, b, c, d = result.whole_system_ss
+    n_freq = _admittance_plot_freq_count(int(a.shape[0]), n_freq)
     omega = np.logspace(np.log10(f_min), np.log10(f_max), n_freq) * 2 * np.pi
     freq = omega / (2 * np.pi)
+    print(f"  [plot] Admittance dq-axes Bode ({n_freq} freq pts)...", flush=True)
 
     if apparatus_indices is None:
         apparatus_indices = [
@@ -204,6 +216,7 @@ def plot_admittance_spectrum(
         a, b, c, d = dss2ss(result.whole_system_dss)
     else:
         a, b, c, d = result.whole_system_ss
+    n_freq = _admittance_plot_freq_count(int(a.shape[0]), n_freq)
 
     omega_p = np.logspace(np.log10(f_min), np.log10(f_max), n_freq) * 2 * np.pi
     omega_pn = np.concatenate([-np.flip(omega_p), omega_p])
@@ -222,6 +235,7 @@ def plot_admittance_spectrum(
 
     legends: list[str] = []
     num_bus = int(np.max(result.buses_after_load[:, 0]))
+    t_inv = np.linalg.inv(COMPLEX_T)
     for bus in range(1, num_bus + 1):
         app_idx = next(
             (idx for idx, buses in enumerate(result.netlists.apparatus_buses) if bus in buses),
@@ -238,25 +252,23 @@ def plot_admittance_spectrum(
         in_idx = result.bus_port_v[bus - 1]
         if len(out_idx) < 1 or len(in_idx) < 1:
             continue
+        print(f"  [plot] Admittance spectrum: Bus{bus} ({n_freq} freq pts)...", flush=True)
         b_bus = b[:, in_idx]
         c_bus = c[out_idx, :]
         d_bus = d[np.ix_(out_idx, in_idx)]
-        y_dq = _ss_frequency_response(a, b_bus, c_bus, d_bus, omega_p)
-        y_dd = y_dq[:, 0, 0]
+        # One sweep over +/- omega; Ydd uses positive freqs; complex-vector via T Y T^{-1}.
+        y_dq = _ss_frequency_response(a, b_bus, c_bus, d_bus, omega_pn)
+        half = omega_p.size
+        y_dd = y_dq[half:, 0, 0]
         label = f"Bus{bus}"
         legends.append(label)
         _bode_mag_phase(ax_dq_mag, ax_dq_phase, freq_p, y_dd, label)
 
-        # Complex-vector frame: Yc = T Ydq T^{-1} (MATLAB PlotAdmittanceSpectrum).
-        # Apply the similarity transform at SS level, then evaluate over +/- Omega.
         if d_bus.shape[0] >= 2 and d_bus.shape[1] >= 2:
-            t_inv = np.linalg.inv(COMPLEX_T)
-            b_cplx = b_bus @ t_inv
-            c_cplx = COMPLEX_T @ c_bus
-            d_cplx = COMPLEX_T @ d_bus @ t_inv
-            y_cplx = _ss_frequency_response(a, b_cplx, c_cplx, d_cplx, omega_pn)
+            y_cplx = np.empty_like(y_dq)
+            for k in range(y_dq.shape[0]):
+                y_cplx[k] = COMPLEX_T @ y_dq[k] @ t_inv
             y11 = y_cplx[:, 0, 0]
-            half = omega_p.size
             _bode_mag_phase(ax_cn_mag, ax_cn_phase, np.abs(freq_n), y11[:half], label)
             _bode_mag_phase(ax_cp_mag, ax_cp_phase, freq_pos, y11[half:], label)
 
@@ -357,8 +369,12 @@ def plot_apparatus_layer12(mode_result: Any, *, fig=None, show: bool = False):
         ax_imag.set_xticks(x)
         ax_real.set_xticklabels(labels, rotation=45, ha="right")
         ax_imag.set_xticklabels(labels, rotation=45, ha="right")
-        ax_real.set_title("Layer 2 real (pu)")
-        ax_imag.set_title("Layer 2 imag (pu)")
+        ax_real.set_title("Layer 2 real (pu) — damping sense")
+        ax_imag.set_title("Layer 2 imag (pu) — frequency sense")
+        ax_real.set_ylabel("Apparatus")
+        ax_imag.set_ylabel("Apparatus")
+        ax_real.set_xlabel("Normalized Re(L₂): damping")
+        ax_imag.set_xlabel("Normalized Im(L₂): frequency")
         ax_real.grid(True, axis="y")
         ax_imag.grid(True, axis="y")
 
@@ -396,8 +412,12 @@ def plot_sensitivity_layer12(sens_result: Any, *, fig=None, show: bool = False):
     ax_imag.set_xticks(x)
     ax_real.set_xticklabels(labels, rotation=45, ha="right")
     ax_imag.set_xticklabels(labels, rotation=45, ha="right")
-    ax_real.set_title("Sens Layer 2 real (pu)")
-    ax_imag.set_title("Sens Layer 2 imag (pu)")
+    ax_real.set_title("Sens Layer 2 real (pu) — damping sense")
+    ax_imag.set_title("Sens Layer 2 imag (pu) — frequency sense")
+    ax_real.set_ylabel("Component")
+    ax_imag.set_ylabel("Component")
+    ax_real.set_xlabel("Normalized Re(L₂): damping")
+    ax_imag.set_xlabel("Normalized Im(L₂): frequency")
     ax_real.grid(True, axis="y")
     ax_imag.grid(True, axis="y")
     fig.tight_layout()
@@ -486,6 +506,7 @@ def plot_case_fundamentals(
             saved["grid_strength_error"] = None
             result.warnings.append(f"Grid-strength plot skipped: {exc}")
 
+
     if not show:
         plt.close("all")
     return saved
@@ -547,5 +568,6 @@ def _maybe_save(fig, output_dir: Path | None, filename: str, show: bool) -> Path
         path = output_dir / filename
         fig.savefig(path, dpi=150, bbox_inches="tight")
     if show:
+        print(f"  [plot] Showing {filename} — close the figure window to continue...")
         plt.show()
     return path

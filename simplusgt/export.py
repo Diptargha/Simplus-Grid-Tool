@@ -415,16 +415,14 @@ def export_greybox_json(
 def export_greybox_excel(result: GreyboxResult, output_path: str | Path) -> Path:
     """Write greybox Ysys/Zsys samples, eigenvalues, State-PF, and Layer tables.
 
-    Sheets:
+    Sheet order (Layer tabs first so they are easy to find in Excel):
     - ``Summary`` — case / grid / mode metadata
-    - ``Channels`` — port index map for Ysys/Zsys
-    - ``Ysys`` / ``Zsys`` — long-form frequency response (Mag, Phase, Real, Imag)
-    - ``Ysys_MagPhase`` / ``Zsys_MagPhase`` — wide Mag/Phase when column count fits Excel
-    - ``Ysys_RealImag`` / ``Zsys_RealImag`` — wide Real/Imag when column count fits Excel
-    - ``Eigenvalues`` — whole-system finite eigenvalues (rad/s and Hz)
-    - ``StatePF`` — state participation factors (absolute, normalized to max per mode)
+    - ``Eigenvalues`` / ``StatePF``
     - ``Layer1`` / ``Layer2`` / ``Layer3`` — apparatus modal layers (if computed)
     - ``Sens_Layer12`` — sensitivity Layer 1/2 (if computed)
+    - ``Channels`` / ``Channels_Zsys``
+    - ``Ysys`` / ``Zsys`` — long-form frequency response
+    - ``Ysys_MagPhase`` / ``Zsys_MagPhase`` / ``Ysys_RealImag`` / ``Zsys_RealImag`` when they fit
     """
 
     import pandas as pd
@@ -455,105 +453,162 @@ def export_greybox_excel(result: GreyboxResult, output_path: str | Path) -> Path
         ]
     )
 
+    layer1_rows: list[dict[str, Any]] = []
+    layer2_rows: list[dict[str, Any]] = []
+    layer3_rows: list[dict[str, Any]] = []
+    for mode in result.modes:
+        eig = complex(mode.eigenvalue)
+        eig_hz = eig / (2 * np.pi)
+        eig_cols = {
+            "mode_index": mode.mode_index,
+            "eigenvalue_real_rad_s": float(np.real(eig)),
+            "eigenvalue_imag_rad_s": float(np.imag(eig)),
+            "eigenvalue_real_hz": float(np.real(eig_hz)),
+            "eigenvalue_imag_hz": float(np.imag(eig_hz)),
+        }
+        for item in mode.layer1:
+            layer1_rows.append(
+                {
+                    **eig_cols,
+                    **{k: item.get(k) for k in ("apparatus_index", "label", "value", "normalized")},
+                }
+            )
+        for item in mode.layer2:
+            layer2_rows.append(
+                {
+                    **eig_cols,
+                    **{
+                        k: item.get(k)
+                        for k in (
+                            "apparatus_index",
+                            "label",
+                            "real",
+                            "imag",
+                            "real_normalized",
+                            "imag_normalized",
+                        )
+                    },
+                }
+            )
+        for item in mode.layer3:
+            d_rad = complex(item.get("d_lambda_rad", 0.0))
+            d_hz = complex(item.get("d_lambda_hz", 0.0))
+            d_pu = complex(item.get("d_lambda_pu_hz", 0.0))
+            layer3_rows.append(
+                {
+                    **eig_cols,
+                    "apparatus_index": item.get("apparatus_index"),
+                    "label": item.get("label"),
+                    "parameter": item.get("parameter"),
+                    "d_lambda_rad_real": float(np.real(d_rad)),
+                    "d_lambda_rad_imag": float(np.imag(d_rad)),
+                    "d_lambda_hz_real": float(np.real(d_hz)),
+                    "d_lambda_hz_imag": float(np.imag(d_hz)),
+                    "d_lambda_pu_hz_real": float(np.real(d_pu)),
+                    "d_lambda_pu_hz_imag": float(np.imag(d_pu)),
+                }
+            )
+
+    sens_rows: list[dict[str, Any]] = []
+    for sens in result.sensitivity:
+        eig = complex(sens.eigenvalue)
+        for item in sens.layer12:
+            sens_rows.append(
+                {
+                    "mode_index": sens.mode_index,
+                    "eigenvalue_real_rad_s": float(np.real(eig)),
+                    "eigenvalue_imag_rad_s": float(np.imag(eig)),
+                    **item,
+                }
+            )
+
+    written: dict[str, int] = {}
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         summary.to_excel(writer, sheet_name="Summary", index=False)
-        _transfer_channel_table(result.admittance, "Ysys").to_excel(writer, sheet_name="Channels", index=False)
-        # Append Zsys channels under the same sheet layout via a second Channels_Zsys sheet.
-        _transfer_channel_table(result.impedance, "Zsys").to_excel(writer, sheet_name="Channels_Zsys", index=False)
-
-        for name, transfer in (("Ysys", result.admittance), ("Zsys", result.impedance)):
-            _transfer_long_table(transfer).to_excel(writer, sheet_name=name, index=False)
-            wide_mag = _transfer_wide_mag_phase(transfer)
-            wide_ri = _transfer_wide_real_imag(transfer)
-            if wide_mag is not None:
-                wide_mag.to_excel(writer, sheet_name=_sheet_name(f"{name}_MagPhase"), index=False)
-            if wide_ri is not None:
-                wide_ri.to_excel(writer, sheet_name=_sheet_name(f"{name}_RealImag"), index=False)
+        written["Summary"] = len(summary)
 
         eig_df = _eigenvalues_dataframe(result.run_result.eigenvalues)
         if not eig_df.empty:
             eig_df.to_excel(writer, sheet_name="Eigenvalues", index=False)
+            written["Eigenvalues"] = len(eig_df)
 
         state_pf_df = _state_pf_dataframe(result.run_result)
         if not state_pf_df.empty:
             state_pf_df.to_excel(writer, sheet_name="StatePF", index=False)
+            written["StatePF"] = len(state_pf_df)
 
-        layer1_rows: list[dict[str, Any]] = []
-        layer2_rows: list[dict[str, Any]] = []
-        layer3_rows: list[dict[str, Any]] = []
-        for mode in result.modes:
-            eig = complex(mode.eigenvalue)
-            eig_hz = eig / (2 * np.pi)
-            eig_cols = {
-                "mode_index": mode.mode_index,
-                "eigenvalue_real_rad_s": float(np.real(eig)),
-                "eigenvalue_imag_rad_s": float(np.imag(eig)),
-                "eigenvalue_real_hz": float(np.real(eig_hz)),
-                "eigenvalue_imag_hz": float(np.imag(eig_hz)),
-            }
-            for item in mode.layer1:
-                layer1_rows.append(
-                    {
-                        **eig_cols,
-                        **{k: item.get(k) for k in ("apparatus_index", "label", "value", "normalized")},
-                    }
-                )
-            for item in mode.layer2:
-                layer2_rows.append(
-                    {
-                        **eig_cols,
-                        **{
-                            k: item.get(k)
-                            for k in (
-                                "apparatus_index",
-                                "label",
-                                "real",
-                                "imag",
-                                "real_normalized",
-                                "imag_normalized",
-                            )
-                        },
-                    }
-                )
-            for item in mode.layer3:
-                d_rad = complex(item.get("d_lambda_rad", 0.0))
-                d_hz = complex(item.get("d_lambda_hz", 0.0))
-                d_pu = complex(item.get("d_lambda_pu_hz", 0.0))
-                layer3_rows.append(
-                    {
-                        **eig_cols,
-                        "apparatus_index": item.get("apparatus_index"),
-                        "label": item.get("label"),
-                        "parameter": item.get("parameter"),
-                        "d_lambda_rad_real": float(np.real(d_rad)),
-                        "d_lambda_rad_imag": float(np.imag(d_rad)),
-                        "d_lambda_hz_real": float(np.real(d_hz)),
-                        "d_lambda_hz_imag": float(np.imag(d_hz)),
-                        "d_lambda_pu_hz_real": float(np.real(d_pu)),
-                        "d_lambda_pu_hz_imag": float(np.imag(d_pu)),
-                    }
-                )
+        # Layer sheets immediately after modal tables (before wide FRF tabs).
         if layer1_rows:
             pd.DataFrame(layer1_rows).to_excel(writer, sheet_name="Layer1", index=False)
+            written["Layer1"] = len(layer1_rows)
         if layer2_rows:
             pd.DataFrame(layer2_rows).to_excel(writer, sheet_name="Layer2", index=False)
+            written["Layer2"] = len(layer2_rows)
         if layer3_rows:
             pd.DataFrame(layer3_rows).to_excel(writer, sheet_name="Layer3", index=False)
-
-        sens_rows: list[dict[str, Any]] = []
-        for sens in result.sensitivity:
-            eig = complex(sens.eigenvalue)
-            for item in sens.layer12:
-                sens_rows.append(
-                    {
-                        "mode_index": sens.mode_index,
-                        "eigenvalue_real_rad_s": float(np.real(eig)),
-                        "eigenvalue_imag_rad_s": float(np.imag(eig)),
-                        **item,
-                    }
-                )
+            written["Layer3"] = len(layer3_rows)
         if sens_rows:
             pd.DataFrame(sens_rows).to_excel(writer, sheet_name="Sens_Layer12", index=False)
+            written["Sens_Layer12"] = len(sens_rows)
+
+        ch_y = _transfer_channel_table(result.admittance, "Ysys")
+        ch_y.to_excel(writer, sheet_name="Channels", index=False)
+        written["Channels"] = len(ch_y)
+        ch_z = _transfer_channel_table(result.impedance, "Zsys")
+        ch_z.to_excel(writer, sheet_name="Channels_Zsys", index=False)
+        written["Channels_Zsys"] = len(ch_z)
+
+        for name, transfer in (("Ysys", result.admittance), ("Zsys", result.impedance)):
+            long_df = _transfer_long_table(transfer)
+            long_df.to_excel(writer, sheet_name=name, index=False)
+            written[name] = len(long_df)
+            wide_mag = _transfer_wide_mag_phase(transfer)
+            wide_ri = _transfer_wide_real_imag(transfer)
+            if wide_mag is not None:
+                sheet = _sheet_name(f"{name}_MagPhase")
+                wide_mag.to_excel(writer, sheet_name=sheet, index=False)
+                written[sheet] = len(wide_mag)
+            if wide_ri is not None:
+                sheet = _sheet_name(f"{name}_RealImag")
+                wide_ri.to_excel(writer, sheet_name=sheet, index=False)
+                written[sheet] = len(wide_ri)
+
+    # #region agent log
+    try:
+        import json as _json
+        import time as _time
+
+        with open(
+            r"C:\Users\z004z29x\PycharmProjects\Simplus-Grid-Tool\debug-e9b6f6.log",
+            "a",
+            encoding="utf-8",
+        ) as _f:
+            _f.write(
+                _json.dumps(
+                    {
+                        "sessionId": "e9b6f6",
+                        "runId": "post-fix",
+                        "hypothesisId": "C",
+                        "location": "export.py:export_greybox_excel",
+                        "message": "greybox excel sheets written",
+                        "data": {
+                            "output": str(output_path),
+                            "n_modes": len(result.modes),
+                            "layer_flags": result.config.layers.names(),
+                            "layer1_rows": len(layer1_rows),
+                            "layer2_rows": len(layer2_rows),
+                            "layer3_rows": len(layer3_rows),
+                            "sens_l12_rows": len(sens_rows),
+                            "sheets": written,
+                        },
+                        "timestamp": int(_time.time() * 1000),
+                    }
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
 
     return output_path
 

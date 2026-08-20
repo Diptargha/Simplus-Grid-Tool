@@ -7,6 +7,7 @@ import argparse
 from .analysis import stability_report
 from .export import export_dashboard_json, export_greybox_json
 from .greybox import FrequencyGrid, GreyboxConfig, GreyboxLayerSelection, run_greybox
+from .html_dashboard import write_analysis_dashboard
 from .pipeline import run_case
 from .plotting import plot_case_fundamentals, plot_greybox_summary
 
@@ -41,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     plot_parser.add_argument("--greybox", action="store_true", help="Also plot greybox Ysys/Zsys and Layer 1/2")
     plot_parser.add_argument("--layers", default="app-l1,app-l2,sens-l12", help="Greybox layers when --greybox is set")
     plot_parser.add_argument("--modes", default="auto", help="Greybox mode indices, or 'auto' for oscillatory modes")
+    plot_parser.add_argument(
+        "--html-dashboard",
+        default=None,
+        metavar="PATH",
+        help="Write interactive Plotly HTML dashboard to PATH (opens in browser if --show)",
+    )
     args = parser.parse_args(argv)
     if args.command == "run":
         result = run_case(args.case, args.format)
@@ -78,12 +85,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"exported: {output}")
     elif args.command == "plot":
         result = run_case(args.case)
-        saved = plot_case_fundamentals(result, output_dir=args.output_dir, show=args.show)
+        greybox = None
+        html_path = args.html_dashboard
+        show_mpl = bool(args.show and not html_path)
+        saved = plot_case_fundamentals(result, output_dir=args.output_dir, show=show_mpl)
         print(f"fundamental plots: {args.output_dir}")
         for key, path in saved.items():
             if path is not None:
                 print(f"- {key}: {path}")
-        if args.greybox:
+        if args.greybox or html_path:
             modes = (
                 _auto_modes(result.eigenvalues)
                 if str(args.modes).strip().lower() == "auto"
@@ -96,10 +106,29 @@ def main(argv: list[str] | None = None) -> int:
                     modes=modes,
                 )
             )
-            saved_gb = plot_greybox_summary(greybox, output_dir=args.output_dir, show=args.show)
-            for key, path in saved_gb.items():
-                if path is not None:
-                    print(f"- {key}: {path}")
+            if args.greybox:
+                saved_gb = plot_greybox_summary(
+                    greybox,
+                    output_dir=args.output_dir,
+                    show=show_mpl,
+                )
+                for key, path in saved_gb.items():
+                    if path is not None:
+                        print(f"- {key}: {path}")
+        if html_path:
+            written = write_analysis_dashboard(
+                result,
+                greybox,
+                output_path=html_path,
+                include_pole=True,
+                include_strength=True,
+                include_admittance=False,
+                include_dq_axes=False,
+                include_greybox=greybox is not None,
+                case_label=str(args.case),
+                open_browser=bool(args.show),
+            )
+            print(f"html dashboard: {written}")
         if result.warnings:
             print("warnings:")
             for warning in result.warnings:

@@ -44,8 +44,8 @@ USER_DATA_TYPE = "json"
 
 # --- Fundamental plots (MATLAB Main.m) -------------------------------------
 ENABLE_PLOT_POLE = True
-ENABLE_PLOT_ADMITTANCE = True          # Ydd + complex-vector Ydq+
-ENABLE_PLOT_ADMITTANCE_DQ_AXES = True  # dd / dq / qd / qq (Modal BodeDraw)
+ENABLE_PLOT_ADMITTANCE = False          # Ydd + complex-vector Ydq+
+ENABLE_PLOT_ADMITTANCE_DQ_AXES = False  # dd / dq / qd / qq (Modal BodeDraw)
 ENABLE_PLOT_GRID_STRENGTH = True
 
 # --- Greybox / modal analysis ----------------------------------------------
@@ -57,12 +57,18 @@ ENABLE_GREYBOX_SENS_LAYER12 = True   # sensitivity Layer 1/2
 ENABLE_GREYBOX_SENS_LAYER3 = False   # sensitivity Layer 3
 # Mode indices (0-based). Use "auto" to pick oscillatory modes.
 GREYBOX_MODES = "auto"
-GREYBOX_FREQ_MIN_HZ = 0.1
+GREYBOX_FREQ_MIN_HZ = 1
 GREYBOX_FREQ_MAX_HZ = 1000.0
-GREYBOX_FREQ_COUNT = 80
+GREYBOX_FREQ_COUNT = 100
 
 # --- Greybox plots ---------------------------------------------------------
 ENABLE_PLOT_GREYBOX = True  # Ysys/Zsys Bode + Layer 1/2 charts
+
+# --- Interactive HTML dashboard (Plotly) -----------------------------------
+# Single browser file with pole / strength / greybox Bode / Layer 1–2 charts.
+# Prefer this over matplotlib for Layer 1/2 (labels stay readable via hover).
+ENABLE_HTML_DASHBOARD = True
+HTML_DASHBOARD_DIR = "Results"  # writes <case>_dashboard.html
 
 # --- Exports ---------------------------------------------------------------
 ENABLE_EXPORT_DASHBOARD = False       # JSON dashboard
@@ -71,12 +77,12 @@ ENABLE_EXPORT_GREYBOX_EXCEL = True    # Excel greybox (Ysys/Zsys, Eigenvalues, S
 EXPORT_DIR = "Results"
 
 # --- Display / save --------------------------------------------------------
-SHOW_PLOTS = False          # interactive windows (set backend below if needed)
-SAVE_PLOTS = True
+SHOW_PLOTS = True          # open HTML dashboard (and matplotlib only if HTML is off)
+SAVE_PLOTS = False         # also write matplotlib PNGs under PLOT_DIR
 PLOT_DIR = "Results/plots"
 
-# Non-interactive backend when not showing plots.
-if not SHOW_PLOTS:
+# Non-interactive backend when not showing matplotlib windows.
+if not SHOW_PLOTS or ENABLE_HTML_DASHBOARD:
     matplotlib.use("Agg")
 
 # ---------------------------------------------------------------------------
@@ -86,6 +92,7 @@ if not SHOW_PLOTS:
 from simplusgt.analysis import stability_report
 from simplusgt.export import export_greybox_excel, greybox_result_to_dashboard_data, result_to_dashboard_data
 from simplusgt.greybox import FrequencyGrid, GreyboxConfig, GreyboxLayerSelection, run_greybox
+from simplusgt.html_dashboard import write_analysis_dashboard
 from simplusgt.pipeline import run_case
 from simplusgt.plotting import plot_case_fundamentals, plot_greybox_summary
 
@@ -176,6 +183,8 @@ def main() -> None:
             print(f"  - {warning}")
 
     plot_dir = ROOT / PLOT_DIR if SAVE_PLOTS else None
+    # When the HTML dashboard is enabled, matplotlib is PNG-only (no SciView spam).
+    show_mpl = bool(SHOW_PLOTS and not ENABLE_HTML_DASHBOARD)
     if any(
         (
             ENABLE_PLOT_POLE,
@@ -183,12 +192,12 @@ def main() -> None:
             ENABLE_PLOT_ADMITTANCE_DQ_AXES,
             ENABLE_PLOT_GRID_STRENGTH,
         )
-    ):
+    ) and (SAVE_PLOTS or show_mpl):
         print("\nFundamental plots...")
         saved = plot_case_fundamentals(
             result,
             output_dir=plot_dir,
-            show=SHOW_PLOTS,
+            show=show_mpl,
             include_pole=ENABLE_PLOT_POLE,
             include_admittance=ENABLE_PLOT_ADMITTANCE,
             include_dq_axes=ENABLE_PLOT_ADMITTANCE_DQ_AXES,
@@ -199,7 +208,14 @@ def main() -> None:
                 print(f"  {key}: {path}")
 
     greybox = None
-    if ENABLE_GREYBOX or ENABLE_PLOT_GREYBOX or ENABLE_EXPORT_GREYBOX_JSON or ENABLE_EXPORT_GREYBOX_EXCEL:
+    need_greybox = (
+        ENABLE_GREYBOX
+        or ENABLE_PLOT_GREYBOX
+        or ENABLE_EXPORT_GREYBOX_JSON
+        or ENABLE_EXPORT_GREYBOX_EXCEL
+        or (ENABLE_HTML_DASHBOARD and ENABLE_PLOT_GREYBOX)
+    )
+    if need_greybox:
         print("\nGreybox analysis...")
         modes = parse_modes(GREYBOX_MODES, result.eigenvalues)
         greybox = run_greybox(
@@ -228,12 +244,37 @@ def main() -> None:
                 if warning not in result.warnings:
                     print(f"  - {warning}")
 
-        if ENABLE_PLOT_GREYBOX:
-            print("Greybox plots...")
-            saved_gb = plot_greybox_summary(greybox, output_dir=plot_dir, show=SHOW_PLOTS)
+        # Matplotlib greybox PNGs only when saving; interactive Layer charts use HTML.
+        if ENABLE_PLOT_GREYBOX and SAVE_PLOTS:
+            print("Greybox plots (PNG)...")
+            saved_gb = plot_greybox_summary(greybox, output_dir=plot_dir, show=False)
             for key, path in saved_gb.items():
                 if path is not None:
                     print(f"  {key}: {path}")
+        elif ENABLE_PLOT_GREYBOX and show_mpl:
+            print("Greybox plots...")
+            saved_gb = plot_greybox_summary(greybox, output_dir=None, show=True)
+            for key, path in saved_gb.items():
+                if path is not None:
+                    print(f"  {key}: {path}")
+
+    if ENABLE_HTML_DASHBOARD:
+        html_dir = ROOT / HTML_DASHBOARD_DIR
+        html_path = html_dir / f"{case_path.stem}_dashboard.html"
+        print("\nHTML dashboard...")
+        written = write_analysis_dashboard(
+            result,
+            greybox,
+            output_path=html_path,
+            include_pole=ENABLE_PLOT_POLE,
+            include_strength=ENABLE_PLOT_GRID_STRENGTH,
+            include_admittance=ENABLE_PLOT_ADMITTANCE,
+            include_dq_axes=ENABLE_PLOT_ADMITTANCE_DQ_AXES,
+            include_greybox=ENABLE_PLOT_GREYBOX,
+            case_label=case_path.stem,
+            open_browser=SHOW_PLOTS,
+        )
+        print(f"  {written}")
 
     export_dir = ROOT / EXPORT_DIR
     if ENABLE_EXPORT_DASHBOARD:
@@ -259,6 +300,17 @@ def main() -> None:
         out = export_dir / f"{case_path.stem}_greybox.xlsx"
         export_greybox_excel(greybox, out)
         print(f"Greybox Excel export: {out}")
+        # Surface Layer sheet presence in the console (tabs can be easy to miss in Excel).
+        try:
+            import openpyxl
+
+            wb = openpyxl.load_workbook(out, read_only=True)
+            layer_tabs = [n for n in wb.sheetnames if n.startswith("Layer") or n.startswith("Sens_")]
+            print(f"  Sheets: {', '.join(wb.sheetnames)}")
+            print(f"  Layer tabs: {', '.join(layer_tabs) if layer_tabs else '(none — enable ENABLE_GREYBOX_*_LAYER*)'}")
+            wb.close()
+        except Exception as exc:  # noqa: BLE001
+            print(f"  (could not list sheets: {exc})")
 
     print("\nDone.")
 
