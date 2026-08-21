@@ -178,7 +178,7 @@ Simplus-Grid-Tool/
 | `ENABLE_PLOT_GREYBOX` | Ysys/Zsys Bode + Layer 1 pie / Layer 2 bars |
 | `ENABLE_HTML_DASHBOARD` | Interactive Plotly HTML dashboard (preferred for Layer 1/2/3) |
 
-With `ENABLE_HTML_DASHBOARD = True`, `UserMain` writes `Results/<case>_dashboard.html` and opens it in the browser when `SHOW_PLOTS` is set. Mode Layer 1/2/3 charts use hover tooltips and a mode dropdown so labels stay readable (Layer 3 appears when `ENABLE_GREYBOX_APP_LAYER3` / sensitivity Layer 3 produce data). Matplotlib PNGs are written only when `SAVE_PLOTS = True`.
+With `ENABLE_HTML_DASHBOARD = True`, `UserMain` writes `Results/<case>_dashboard.html` and opens it in the browser when `SHOW_PLOTS` is set. The greybox **Ysys** Bode section uses a channel dropdown (output bus ← input bus); each selection shows that bus pair’s full \(dq\) block (four matrix elements) as magnitude and phase subplots. A **modal contribution** dropdown overlays \(\lvert R/(j2\pi f-\lambda)\rvert\) on the magnitude plots and shows a Bode-visibility note (\(\lVert R\rVert_F/\lvert\sigma\rvert\)). The pole-map hover reports the same residue / visibility metrics (colour = \(\log_{10}\) visibility). (Zsys is omitted from the dashboard for now; it remains in Excel/JSON exports.) By default `UserMain` samples Ysys/Zsys on a **linear 1 Hz** grid from `GREYBOX_FREQ_MIN_HZ` to `GREYBOX_FREQ_MAX_HZ` (`GREYBOX_FREQ_SPACING_HZ`). Mode Layer 1/2/3 charts use hover tooltips and a mode dropdown so labels stay readable (Layer 3 appears when `ENABLE_GREYBOX_APP_LAYER3` / sensitivity Layer 3 produce data). Matplotlib PNGs are written only when `SAVE_PLOTS = True`.
 
 CLI equivalent:
 
@@ -619,7 +619,7 @@ ExportGreyboxExcel('Results/IEEE_14Bus_greybox_matlab.xlsx', ...
     'FrequencyHz', logspace(-1, 3, 80));
 ```
 
-Use the same frequency grid as Python (`GREYBOX_FREQ_MIN_HZ=0.1`, `GREYBOX_FREQ_MAX_HZ=1000`, `GREYBOX_FREQ_COUNT=80` is `logspace(-1,3,80)`).
+Use the same frequency grid as Python when comparing exports. `UserMain` defaults to a linear 1 Hz grid (`GREYBOX_FREQ_MIN_HZ` … `GREYBOX_FREQ_MAX_HZ` with `GREYBOX_FREQ_SPACING_HZ=1`). For a log-spaced reference export, e.g. `logspace(-1, 3, 80)`, set `max_admittance_samples` to the grid length so samples are not downsampled.
 
 To compare the `Zsys` sheets:
 

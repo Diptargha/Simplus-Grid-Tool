@@ -34,7 +34,7 @@ import matplotlib
 #   "Hybrid_4Bus", "HVDC_Infbus_4Bus", "HVDC_SG_4Bus", "MTDC_Infbus_4Bus",
 # Default 4-bus:
 #   "UserData"
-USER_DATA_NAME = "IEEE_14Bus"
+USER_DATA_NAME = "NETS_NYPS_68Bus"
 
 # Preferred file type when resolving a short name: "json" or "excel" (xlsx/xlsm).
 USER_DATA_TYPE = "json"
@@ -52,14 +52,16 @@ ENABLE_PLOT_GRID_STRENGTH = True
 ENABLE_GREYBOX = True
 ENABLE_GREYBOX_APP_LAYER1 = True   # apparatus Layer 1
 ENABLE_GREYBOX_APP_LAYER2 = True   # apparatus Layer 2
-ENABLE_GREYBOX_APP_LAYER3 = False  # apparatus Layer 3 (also adds Layer3 sheet to Excel export)
+ENABLE_GREYBOX_APP_LAYER3 = True  # apparatus Layer 3 (also adds Layer3 sheet to Excel export)
 ENABLE_GREYBOX_SENS_LAYER12 = True   # sensitivity Layer 1/2
-ENABLE_GREYBOX_SENS_LAYER3 = False   # sensitivity Layer 3
+ENABLE_GREYBOX_SENS_LAYER3 = True   # sensitivity Layer 3
 # Mode indices (0-based). Use "auto" to pick oscillatory modes.
 GREYBOX_MODES = "auto"
 GREYBOX_FREQ_MIN_HZ = 1
-GREYBOX_FREQ_MAX_HZ = 1000.0
-GREYBOX_FREQ_COUNT = 100
+GREYBOX_FREQ_MAX_HZ = 1000
+# Linear grid step (Hz). Overrides log-spaced GREYBOX_FREQ_COUNT when set.
+GREYBOX_FREQ_SPACING_HZ = 1.0
+GREYBOX_FREQ_COUNT = 1000  # used only if GREYBOX_FREQ_SPACING_HZ is None
 
 # --- Greybox plots ---------------------------------------------------------
 ENABLE_PLOT_GREYBOX = True  # Ysys/Zsys Bode + Layer 1/2 charts
@@ -218,6 +220,13 @@ def main() -> None:
     if need_greybox:
         print("\nGreybox analysis...")
         modes = parse_modes(GREYBOX_MODES, result.eigenvalues)
+        freq_grid = FrequencyGrid(
+            min_hz=GREYBOX_FREQ_MIN_HZ,
+            max_hz=GREYBOX_FREQ_MAX_HZ,
+            count=GREYBOX_FREQ_COUNT,
+            spacing_hz=GREYBOX_FREQ_SPACING_HZ,
+        )
+        n_freq = int(freq_grid.frequencies().size)
         greybox = run_greybox(
             GreyboxConfig(
                 case_path=case_path,
@@ -229,11 +238,9 @@ def main() -> None:
                     sensitivity_layer3=ENABLE_GREYBOX_SENS_LAYER3,
                 ),
                 modes=modes,
-                frequency_grid=FrequencyGrid(
-                    min_hz=GREYBOX_FREQ_MIN_HZ,
-                    max_hz=GREYBOX_FREQ_MAX_HZ,
-                    count=GREYBOX_FREQ_COUNT,
-                ),
+                frequency_grid=freq_grid,
+                # Keep full grid (do not downsample Ysys/Zsys to the default 80 points).
+                max_admittance_samples=max(n_freq, 80),
             )
         )
         print(f"  Modes: {modes}")

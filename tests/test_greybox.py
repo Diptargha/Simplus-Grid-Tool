@@ -32,6 +32,13 @@ def test_evalfr_matches_first_order_transfer():
     assert np.allclose(value, 4.0 * (3.0 / (1j + 2.0)) + 5.0)
 
 
+def test_frequency_grid_linear_spacing_hz():
+    grid = FrequencyGrid(min_hz=1.0, max_hz=5.0, spacing_hz=1.0)
+    freq = grid.frequencies()
+    assert np.allclose(freq, [1.0, 2.0, 3.0, 4.0, 5.0])
+    assert np.allclose(np.diff(freq), 1.0)
+
+
 def test_descriptor_inverse_matches_static_inverse():
     model = DescriptorStateSpace.static(np.array([[2.0, 0.5], [0.25, 4.0]]))
     inverted = inverse(model)

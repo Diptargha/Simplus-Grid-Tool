@@ -36,11 +36,21 @@ class FrequencyGrid:
     min_hz: float = 0.1
     max_hz: float = 1000.0
     count: int = 80
+    spacing_hz: float | None = None
     values_hz: tuple[float, ...] | None = None
 
     def frequencies(self) -> np.ndarray:
         if self.values_hz is not None:
             values = np.asarray(self.values_hz, dtype=float)
+        elif self.spacing_hz is not None:
+            if self.spacing_hz <= 0:
+                raise ValueError("frequency_grid.spacing_hz must be positive")
+            if self.max_hz < self.min_hz:
+                raise ValueError("frequency_grid.max_hz must be greater than or equal to min_hz")
+            n = int(round((self.max_hz - self.min_hz) / self.spacing_hz)) + 1
+            if n < 1:
+                raise ValueError("frequency_grid spacing produced an empty grid")
+            values = np.linspace(self.min_hz, self.max_hz, n)
         else:
             if self.min_hz <= 0 or self.max_hz <= 0:
                 raise ValueError("Frequency grid bounds must be positive for logarithmic sampling")
@@ -644,8 +654,10 @@ def _optional_int_tuple(value: Any) -> tuple[int, ...] | None:
 def _frequency_grid_from_dict(raw: dict[str, Any]) -> FrequencyGrid:
     if "values_hz" in raw:
         return FrequencyGrid(values_hz=tuple(float(value) for value in raw["values_hz"]))
+    spacing = raw.get("spacing_hz")
     return FrequencyGrid(
         min_hz=float(raw.get("min_hz", 0.1)),
         max_hz=float(raw.get("max_hz", 1000.0)),
         count=int(raw.get("count", 80)),
+        spacing_hz=float(spacing) if spacing is not None else None,
     )

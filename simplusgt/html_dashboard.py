@@ -7,6 +7,8 @@ selector for apparatus / sensitivity Layer 1/2 charts.
 from __future__ import annotations
 
 import html
+import json
+import re
 import webbrowser
 from pathlib import Path
 from typing import Any, Sequence
@@ -51,13 +53,23 @@ def write_analysis_dashboard(
     title = case_label or "SimplusGT analysis"
     sections: list[tuple[str, str, str]] = []  # (section_id, heading, figure_html)
     plotly_js_url = _plotly_js_cdn_url()
+    ysys_modal_metrics: list[dict[str, Any]] | None = None
+    if include_pole or (include_greybox and greybox is not None):
+        ysys_modal_metrics = _ysys_modal_metrics(result)
 
     if include_pole:
         sections.append(
             (
                 "pole-map",
                 "Pole map",
-                _fig_to_div(_pole_map_figure(result.eigenvalues, go=go, make_subplots=make_subplots)),
+                _fig_to_div(
+                    _pole_map_figure(
+                        result.eigenvalues,
+                        go=go,
+                        make_subplots=make_subplots,
+                        modal_metrics=ysys_modal_metrics,
+                    )
+                ),
             )
         )
 
@@ -90,30 +102,21 @@ def write_analysis_dashboard(
         sections.append(
             (
                 "ysys",
-                "Whole-system admittance Ysys(0,0)",
-                _fig_to_div(
-                    _transfer_bode_figure(
-                        greybox.admittance.values,
+                "Whole-system admittance Ysys",
+                _transfer_bode_section_html(
+                    greybox.admittance.values,
+                    greybox.admittance.frequencies_hz,
+                    input_labels=greybox.admittance.input_labels,
+                    output_labels=greybox.admittance.output_labels,
+                    name="Ysys",
+                    mag_axis_title="|Y| (p.u.)",
+                    go=go,
+                    make_subplots=make_subplots,
+                    modal_overlay=_ysys_modal_overlay_payload(
+                        result,
                         greybox.admittance.frequencies_hz,
-                        title="Ysys(0,0)",
-                        go=go,
-                        make_subplots=make_subplots,
-                    )
-                ),
-            )
-        )
-        sections.append(
-            (
-                "zsys",
-                "Whole-system impedance Zsys(0,0)",
-                _fig_to_div(
-                    _transfer_bode_figure(
-                        greybox.impedance.values,
-                        greybox.impedance.frequencies_hz,
-                        title="Zsys(0,0)",
-                        go=go,
-                        make_subplots=make_subplots,
-                    )
+                        metrics=ysys_modal_metrics,
+                    ),
                 ),
             )
         )
@@ -148,26 +151,81 @@ def _plotly_js_cdn_url() -> str:
 
 
 def _fig_to_div(fig) -> str:
-    return fig.to_html(full_html=False, include_plotlyjs=False, config={"responsive": True})
+    html_snippet = fig.to_html(full_html=False, include_plotlyjs=False, config={"responsive": True})
+    # Plotly may bake a fixed pixel width into the outer wrapper; force full card width.
+    return (
+        html_snippet.replace('style="height:', 'style="width:100%; height:', 1)
+        if 'style="width:100%' not in html_snippet[:200]
+        else html_snippet
+    )
 
 
-def _pole_map_figure(eigenvalues: np.ndarray, *, go, make_subplots):
+def _pole_map_figure(
+    eigenvalues: np.ndarray,
+    *,
+    go,
+    make_subplots,
+    modal_metrics: list[dict[str, Any]] | None = None,
+):
     report = stability_report(eigenvalues)
     eig_hz = report.eigenvalues_hz
     re = np.real(eig_hz)
     im = np.imag(eig_hz)
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Global pole map", "Zoomed pole map"))
-    hover = [
-        f"λ={r:.4g}{i:+.4g}j Hz<br>f={abs(i):.4g} Hz"
-        for r, i in zip(re, im, strict=False)
-    ]
+    hover: list[str] = []
+    vis_colors: list[float] = []
+    for r, i, lam_hz in zip(re, im, eig_hz, strict=False):
+        lam_rad = complex(lam_hz) * 2.0 * np.pi
+        metric = _nearest_modal_metric(lam_rad, modal_metrics)
+        zeta = -np.real(lam_rad) / abs(lam_rad) if abs(lam_rad) > 0 else float("nan")
+        if metric is None:
+            hover.append(
+                f"λ={r:.4g}{i:+.4g}j Hz<br>f={abs(i):.4g} Hz<br>ζ={zeta:.4g}<br>"
+                "Ysys residue: n/a"
+            )
+            vis_colors.append(float("nan"))
+        else:
+            hover.append(
+                f"λ={r:.4g}{i:+.4g}j Hz<br>f={abs(i):.4g} Hz<br>ζ={zeta:.4g}<br>"
+                f"||R||_F={metric['r_fro']:.4g}<br>"
+                f"max|R|={metric['r_max']:.4g}<br>"
+                f"Bode visibility max|R|/|σ|={metric['visibility']:.4g}<br>"
+                f"||R||_F/|σ|={metric.get('visibility_fro', float('nan')):.4g}<br>"
+                f"{'unstable' if np.real(lam_rad) > 1e-6 else 'stable'}"
+            )
+            vis_colors.append(float(np.log10(max(metric["visibility"], 1e-30))))
+
+    marker_kwargs: dict[str, Any] = dict(symbol="x", size=8)
+    if modal_metrics and np.any(np.isfinite(vis_colors)):
+        marker_kwargs.update(
+            color=vis_colors,
+            colorscale="Viridis",
+            showscale=True,
+            colorbar=dict(
+                title=dict(text="log10(max|R|/|σ|)", side="right"),
+                x=1.02,
+                len=0.72,
+                y=0.42,
+                yanchor="middle",
+                thickness=14,
+            ),
+            cmin=float(np.nanmin(vis_colors)),
+            cmax=float(np.nanmax(vis_colors)),
+        )
+    else:
+        marker_kwargs["color"] = "#1f77b4"
+
     for col in (1, 2):
+        mk = dict(marker_kwargs)
+        if col == 1 and "showscale" in mk:
+            mk = dict(mk)
+            mk["showscale"] = False
         fig.add_trace(
             go.Scatter(
                 x=re,
                 y=im,
                 mode="markers",
-                marker=dict(symbol="x", size=8, color="#1f77b4"),
+                marker=mk,
                 text=hover,
                 hovertemplate="%{text}<extra></extra>",
                 showlegend=False,
@@ -183,6 +241,7 @@ def _pole_map_figure(eigenvalues: np.ndarray, *, go, make_subplots):
             line=dict(dash="dash", color="#1f77b4", width=1.5),
             name="10% damping",
             hoverinfo="skip",
+            showlegend=True,
         ),
         row=1,
         col=2,
@@ -203,8 +262,160 @@ def _pole_map_figure(eigenvalues: np.ndarray, *, go, make_subplots):
     fig.update_xaxes(title_text="Real Part (Hz)", range=[-80, 20], row=1, col=2)
     fig.update_yaxes(title_text="Imaginary Part (Hz)", row=1, col=1)
     fig.update_yaxes(title_text="Imaginary Part (Hz)", range=[-150, 150], row=1, col=2)
-    fig.update_layout(title_text="Pole map", height=480, margin=dict(t=60, b=40))
+    fig.update_layout(
+        title_text="Pole map (hover: Ysys residue / Bode visibility)",
+        height=520,
+        margin=dict(t=60, b=70, r=110),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.16,
+            x=0.75,
+            xanchor="center",
+            bgcolor="rgba(255,255,255,0.9)",
+        ),
+    )
     return fig
+
+
+def _ysys_ss_abcd(result: RunResult) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    if not result.port_i or not result.port_v:
+        return None
+    ysys = result.whole_system_dss.truncate(result.port_i, result.port_v)
+    try:
+        return dss2ss(ysys)
+    except (np.linalg.LinAlgError, ValueError):
+        return None
+
+
+def _ysys_modal_metrics(result: RunResult) -> list[dict[str, Any]]:
+    """Per-eigenvalue Ysys residue norms and Bode-visibility |R|_F / |σ| (σ in rad/s)."""
+
+    from scipy.linalg import eig
+
+    abcd = _ysys_ss_abcd(result)
+    if abcd is None:
+        return []
+    a, b, c, _d = abcd
+    if a.size == 0:
+        return []
+    evals, left, right = eig(a, left=True, right=True)
+    metrics: list[dict[str, Any]] = []
+    for idx, lam in enumerate(evals):
+        if not np.isfinite(lam):
+            continue
+        phi = right[:, idx : idx + 1]
+        psi = left[:, idx].conj()[None, :]
+        den = (psi @ phi)[0, 0]
+        if abs(den) < 1e-18:
+            residue = np.zeros((c.shape[0], b.shape[1]), dtype=complex)
+        else:
+            residue = c @ phi @ (psi / den) @ b
+        r_fro = float(np.linalg.norm(residue, "fro"))
+        r_max = float(np.max(np.abs(residue))) if residue.size else 0.0
+        sigma = abs(float(np.real(lam)))
+        # Bode-axis peak scale for the strongest port entry (more relevant than Frobenius).
+        visibility = r_max / max(sigma, 1e-12)
+        visibility_fro = r_fro / max(sigma, 1e-12)
+        metrics.append(
+            {
+                "eigenvalue": complex(lam),
+                "r_fro": r_fro,
+                "r_max": r_max,
+                "visibility": visibility,
+                "visibility_fro": visibility_fro,
+                "residue": residue,
+            }
+        )
+    return metrics
+
+
+def _nearest_modal_metric(
+    lam_rad: complex,
+    metrics: list[dict[str, Any]] | None,
+    *,
+    rel_tol: float = 1e-6,
+) -> dict[str, Any] | None:
+    if not metrics:
+        return None
+    best = None
+    best_dist = float("inf")
+    scale = max(abs(lam_rad), 1.0)
+    for item in metrics:
+        dist = abs(complex(item["eigenvalue"]) - complex(lam_rad))
+        if dist < best_dist:
+            best_dist = dist
+            best = item
+    if best is None or best_dist > max(1e-6, rel_tol * scale):
+        return None
+    return best
+
+
+def _ysys_modal_overlay_payload(
+    result: RunResult,
+    frequencies_hz: np.ndarray,
+    *,
+    max_modes: int = 40,
+    metrics: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Compact mode list for client-side |R/(j2πf-λ)| overlays on Ysys magnitude."""
+
+    metrics = metrics if metrics is not None else _ysys_modal_metrics(result)
+    if not metrics:
+        return {"modes": []}
+
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for item in metrics:
+        lam = complex(item["eigenvalue"])
+        f_hz = abs(np.imag(lam) / (2.0 * np.pi))
+        unstable = np.real(lam) > 1e-6
+        # Prefer unstable and oscillatory modes with non-trivial residue.
+        if item["r_fro"] < 1e-10 and not unstable:
+            continue
+        score = (1e6 if unstable else 0.0) + f_hz + 0.01 * item["visibility"]
+        ranked.append((score, item))
+    ranked.sort(key=lambda pair: -pair[0])
+
+    # Keep one of each conjugate pair (prefer Im >= 0).
+    selected: list[dict[str, Any]] = []
+    seen_keys: set[tuple[float, float]] = set()
+    for _score, item in ranked:
+        lam = complex(item["eigenvalue"])
+        key = (round(np.real(lam), 4), round(abs(np.imag(lam)), 4))
+        if key in seen_keys:
+            continue
+        if np.imag(lam) < -1e-9:
+            # Prefer the +imag twin if present later/earlier; skip negative imag.
+            continue
+        seen_keys.add(key)
+        residue = np.asarray(item["residue"], dtype=complex)
+        selected.append(
+            {
+                "id": f"mode-{len(selected)}",
+                "label": _modal_overlay_label(lam, item),
+                "lambda_re": float(np.real(lam)),
+                "lambda_im": float(np.imag(lam)),
+                "r_fro": float(item["r_fro"]),
+                "visibility": float(item["visibility"]),
+                "residue_re": np.real(residue).astype(float).tolist(),
+                "residue_im": np.imag(residue).astype(float).tolist(),
+            }
+        )
+        if len(selected) >= max_modes:
+            break
+
+    freq = np.asarray(frequencies_hz, dtype=float).ravel()
+    return {"freq": freq.astype(float).tolist(), "modes": selected}
+
+
+def _modal_overlay_label(lam: complex, metric: dict[str, Any]) -> str:
+    f_hz = abs(np.imag(lam) / (2.0 * np.pi))
+    sigma_hz = np.real(lam) / (2.0 * np.pi)
+    tag = "unstable" if np.real(lam) > 1e-6 else "stable"
+    return (
+        f"f≈{f_hz:.3g} Hz, σ≈{sigma_hz:.3g} Hz ({tag}); "
+        f"max|R|/|σ|={metric['visibility']:.3g}"
+    )
 
 
 def _grid_strength_figure(result: RunResult, *, go):
@@ -289,33 +500,513 @@ def _grid_strength_figure(result: RunResult, *, go):
     return fig
 
 
-def _transfer_bode_figure(values: np.ndarray, frequencies_hz: np.ndarray, *, title: str, go, make_subplots, row: int = 0, col: int = 0):
+def _transfer_bode_section_html(
+    values: np.ndarray,
+    frequencies_hz: np.ndarray,
+    *,
+    input_labels: Sequence[str] | None,
+    output_labels: Sequence[str] | None,
+    name: str,
+    mag_axis_title: str,
+    go,
+    make_subplots,
+    modal_overlay: dict[str, Any] | None = None,
+) -> str:
+    """Dropdown of bus-to-bus channels; selected channel shows its full dq/scalar block."""
+
     vals = np.asarray(values, dtype=complex)
-    freq = np.asarray(frequencies_hz, dtype=float)
-    if vals.ndim != 3 or vals.shape[0] == 0:
-        channel = np.array([], dtype=complex)
-    else:
-        r = min(row, vals.shape[1] - 1) if vals.shape[1] else 0
-        c = min(col, vals.shape[2] - 1) if vals.shape[2] else 0
-        channel = vals[:, r, c]
-    mag = np.maximum(np.abs(channel), 1e-30)
-    phase = np.unwrap(np.angle(channel)) * 180 / np.pi if channel.size else np.array([])
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08)
-    fig.add_trace(
-        go.Scatter(x=freq, y=mag, mode="lines", name="|G|", hovertemplate="f=%{x:.4g} Hz<br>|G|=%{y:.4g}<extra></extra>"),
-        row=1,
-        col=1,
+    freq = np.asarray(frequencies_hz, dtype=float).ravel()
+    n_out = int(vals.shape[1]) if vals.ndim == 3 else 0
+    n_in = int(vals.shape[2]) if vals.ndim == 3 else 0
+    out_labs = _transfer_axis_labels(output_labels, n_out, prefix="y")
+    in_labs = _transfer_axis_labels(input_labels, n_in, prefix="u")
+    blocks = _mimo_dq_blocks(out_labs, in_labs)
+    prefix = re.sub(r"[^a-z0-9]+", "", name.lower()) or "xfer"
+    if not blocks or vals.ndim != 3 or freq.size == 0:
+        return "<p class='note'>No transfer channels available.</p>"
+
+    channel_payload: list[dict[str, Any]] = []
+    for block in blocks:
+        out_idx = list(block["out_indices"])
+        in_idx = list(block["in_indices"])
+        element_labels = [f"{out_labs[r]}/{in_labs[c]}" for r in out_idx for c in in_idx]
+        mag: list[list[float]] = []
+        phase: list[list[float]] = []
+        for r in out_idx:
+            for c in in_idx:
+                channel = vals[:, r, c]
+                mag.append(np.abs(channel).astype(float).tolist())
+                phase.append((np.unwrap(np.angle(channel)) * 180.0 / np.pi).astype(float).tolist())
+        channel_payload.append(
+            {
+                "id": block["id"],
+                "label": block["label"],
+                "n_out": len(out_idx),
+                "n_in": len(in_idx),
+                "out_indices": out_idx,
+                "in_indices": in_idx,
+                "element_labels": element_labels,
+                "mag": mag,
+                "phase": phase,
+            }
+        )
+
+    first = blocks[0]
+    mag_fig = _transfer_block_grid_figure(
+        vals,
+        freq,
+        out_indices=first["out_indices"],
+        in_indices=first["in_indices"],
+        out_labels=out_labs,
+        in_labels=in_labs,
+        title=f"{name} magnitude — {first['label']}",
+        quantity="mag",
+        y_axis_title=mag_axis_title,
+        go=go,
+        make_subplots=make_subplots,
+        include_modal_overlay_traces=True,
     )
-    fig.add_trace(
-        go.Scatter(x=freq, y=phase, mode="lines", name="phase", hovertemplate="f=%{x:.4g} Hz<br>∠=%{y:.2f}°<extra></extra>"),
-        row=2,
-        col=1,
+    phase_fig = _transfer_block_grid_figure(
+        vals,
+        freq,
+        out_indices=first["out_indices"],
+        in_indices=first["in_indices"],
+        out_labels=out_labs,
+        in_labels=in_labs,
+        title=f"{name} phase — {first['label']}",
+        quantity="phase",
+        y_axis_title="Phase (deg)",
+        go=go,
+        make_subplots=make_subplots,
+        include_modal_overlay_traces=False,
     )
-    fig.update_xaxes(type="log", title_text="Frequency (Hz)", row=2, col=1)
-    fig.update_yaxes(type="log", title_text="|G|", row=1, col=1)
-    fig.update_yaxes(title_text="Phase (deg)", row=2, col=1)
-    fig.update_layout(title_text=title, height=480, showlegend=False, margin=dict(t=50, b=40))
+
+    select_id = f"{prefix}-channel-select"
+    mode_select_id = f"{prefix}-mode-select"
+    data_id = f"{prefix}-channel-data"
+    modal_data_id = f"{prefix}-modal-data"
+    mag_wrap_id = f"{prefix}-mag-wrap"
+    phase_wrap_id = f"{prefix}-phase-wrap"
+    title_id = f"{prefix}-channel-title"
+    note_id = f"{prefix}-modal-note"
+    options = "".join(
+        f'<option value="{html.escape(ch["id"])}">{html.escape(ch["label"])}</option>'
+        for ch in channel_payload
+    )
+    overlay = modal_overlay or {"modes": []}
+    mode_options = '<option value="">None (Ysys only)</option>' + "".join(
+        f'<option value="{html.escape(mode["id"])}">{html.escape(mode["label"])}</option>'
+        for mode in overlay.get("modes", [])
+    )
+    payload_json = json.dumps(
+        {"freq": freq.astype(float).tolist(), "channels": channel_payload},
+        separators=(",", ":"),
+    )
+    modal_json = json.dumps(overlay, separators=(",", ":"))
+    first_title = f"{channel_payload[0]['label']} ({channel_payload[0]['n_out']}×{channel_payload[0]['n_in']})"
+    return f"""
+<label for="{html.escape(select_id)}">Channel (output bus ← input bus)</label>
+<select id="{html.escape(select_id)}">{options}</select>
+<label for="{html.escape(mode_select_id)}">Modal contribution overlay</label>
+<select id="{html.escape(mode_select_id)}">{mode_options}</select>
+<p class="mode-title" id="{html.escape(title_id)}">{html.escape(first_title)}</p>
+<p class="note" id="{html.escape(note_id)}">Select a mode to overlay |R/(j2πf−λ)| on the magnitude plots. Visibility is max|R|/|σ| over ports (σ in rad/s). A globally strong mode can still be weak on the selected bus channel.</p>
+<div id="{html.escape(mag_wrap_id)}">{_fig_to_div(mag_fig)}</div>
+<div id="{html.escape(phase_wrap_id)}">{_fig_to_div(phase_fig)}</div>
+<script type="application/json" id="{html.escape(data_id)}">{payload_json}</script>
+<script type="application/json" id="{html.escape(modal_data_id)}">{modal_json}</script>
+<script>
+(function () {{
+  const select = document.getElementById({select_id!r});
+  const modeSelect = document.getElementById({mode_select_id!r});
+  const dataEl = document.getElementById({data_id!r});
+  const modalEl = document.getElementById({modal_data_id!r});
+  const titleEl = document.getElementById({title_id!r});
+  const noteEl = document.getElementById({note_id!r});
+  const magWrap = document.getElementById({mag_wrap_id!r});
+  const phaseWrap = document.getElementById({phase_wrap_id!r});
+  if (!select || !dataEl) return;
+  const payload = JSON.parse(dataEl.textContent);
+  const modalPayload = modalEl ? JSON.parse(modalEl.textContent) : {{modes: []}};
+  const byId = Object.fromEntries(payload.channels.map((ch) => [ch.id, ch]));
+  const modesById = Object.fromEntries((modalPayload.modes || []).map((m) => [m.id, m]));
+  const freq = payload.freq;
+
+  function plotDiv(wrap) {{
+    return wrap ? wrap.querySelector(".plotly-graph-div") : null;
+  }}
+
+  function updateAnnotations(gd, labels) {{
+    if (!gd || !gd.layout || !gd.layout.annotations) return labels.map((lab) => ({{text: lab}}));
+    return gd.layout.annotations.map((ann, idx) => {{
+      const next = Object.assign({{}}, ann);
+      if (idx < labels.length) next.text = labels[idx];
+      return next;
+    }});
+  }}
+
+  function modalContribution(mode, outIdx, inIdx) {{
+    const nOutFull = mode.residue_re.length;
+    const nInFull = nOutFull ? mode.residue_re[0].length : 0;
+    const lam = {{re: mode.lambda_re, im: mode.lambda_im}};
+    const curves = [];
+    let blockRmax = 0;
+    for (let r = 0; r < outIdx.length; r++) {{
+      for (let c = 0; c < inIdx.length; c++) {{
+        const rr = outIdx[r];
+        const cc = inIdx[c];
+        const reR = (rr < nOutFull && cc < nInFull) ? mode.residue_re[rr][cc] : 0;
+        const imR = (rr < nOutFull && cc < nInFull) ? mode.residue_im[rr][cc] : 0;
+        blockRmax = Math.max(blockRmax, Math.hypot(reR, imR));
+        const y = freq.map((f) => {{
+          const wi = 2 * Math.PI * f;
+          const dr = 0 - lam.re;
+          const di = wi - lam.im;
+          const den = dr * dr + di * di;
+          if (den < 1e-30) return 0;
+          return Math.hypot(reR, imR) / Math.sqrt(den);
+        }});
+        curves.push(y);
+      }}
+    }}
+    const sigma = Math.abs(lam.re);
+    return {{curves: curves, blockRmax: blockRmax, blockVis: blockRmax / Math.max(sigma, 1e-12)}};
+  }}
+
+  function overlayTraceIndices(gd, nWanted) {{
+    if (!gd || !gd.data) return [];
+    const idxs = [];
+    for (let i = 0; i < gd.data.length; i++) {{
+      const nm = (gd.data[i].name || "");
+      if (nm.startsWith("modal")) idxs.push(i);
+    }}
+    if (idxs.length >= nWanted) return idxs.slice(0, nWanted);
+    // Fallback: assume overlays were appended after the nWanted channel traces.
+    return Array.from({{length: nWanted}}, (_, i) => nWanted + i);
+  }}
+
+  function applyOverlay(ch) {{
+    const magGd = plotDiv(magWrap);
+    if (!magGd || !window.Plotly || !modeSelect) return;
+    const nTrace = ch.element_labels.length;
+    const modeId = modeSelect.value;
+    const mode = modeId ? modesById[modeId] : null;
+    const overlayIdx = overlayTraceIndices(magGd, nTrace);
+    if (!mode) {{
+      Plotly.restyle(magGd, {{
+        y: Array.from({{length: nTrace}}, () => freq.map(() => null)),
+        visible: Array.from({{length: nTrace}}, () => false),
+      }}, overlayIdx);
+      if (noteEl) {{
+        noteEl.textContent = "Select a mode to overlay |R/(j2πf−λ)| on the magnitude plots. Visibility uses max|R|/|σ| over ports (σ in rad/s). A mode can look strong globally yet be weak on the selected bus channel.";
+      }}
+      return;
+    }}
+    const contrib = modalContribution(mode, ch.out_indices, ch.in_indices);
+    // Restyle each overlay trace explicitly (subplot-safe).
+    for (let i = 0; i < nTrace; i++) {{
+      const idx = overlayIdx[i];
+      if (idx === undefined) continue;
+      Plotly.restyle(
+        magGd,
+        {{
+          x: [freq],
+          y: [contrib.curves[i]],
+          name: ["modal " + ch.element_labels[i]],
+          visible: [true],
+          "line.dash": ["dash"],
+          "line.color": ["#c51b8a"],
+          hovertemplate: [
+            "modal " + ch.element_labels[i] +
+            "<br>f=%{{x:.4g}} Hz<br>|R/(j2πf−λ)|=%{{y:.4g}}<extra></extra>"
+          ],
+        }},
+        [idx]
+      );
+    }}
+    if (noteEl) {{
+      const fHz = Math.abs(mode.lambda_im) / (2 * Math.PI);
+      noteEl.textContent = "Modal overlay: " + mode.label +
+        ". Channel-block max|R|/|σ|=" + Number(contrib.blockVis).toPrecision(4) +
+        " (global max|R|/|σ|=" + Number(mode.visibility).toPrecision(4) +
+        "). |R/(j2πf−λ)| is the single-mode contribution on this bus pair. " +
+        (contrib.blockVis < 0.05 * Math.max(mode.visibility, 1e-12)
+          ? "This mode is weak on the selected channel — try another bus pair or another mode. "
+          : "") +
+        "Expected peak near f≈" + fHz.toPrecision(4) + " Hz if visible.";
+    }}
+  }}
+
+  function applyChannel(id) {{
+    const ch = byId[id];
+    if (!ch) return;
+    if (titleEl) titleEl.textContent = ch.label + " (" + ch.n_out + "\\u00d7" + ch.n_in + ")";
+    const nTrace = ch.element_labels.length;
+    const indices = Array.from({{length: nTrace}}, (_, i) => i);
+    const magGd = plotDiv(magWrap);
+    const phaseGd = plotDiv(phaseWrap);
+    if (magGd && window.Plotly) {{
+      Plotly.update(
+        magGd,
+        {{
+          x: Array.from({{length: nTrace}}, () => freq),
+          y: ch.mag,
+          name: ch.element_labels,
+          hovertemplate: ch.element_labels.map(
+            (lab) => lab + "<br>f=%{{x:.4g}} Hz<br>|G|=%{{y:.4g}} p.u.<extra></extra>"
+          ),
+        }},
+        {{
+          title: {{text: {name!r} + " magnitude — " + ch.label}},
+          annotations: updateAnnotations(magGd, ch.element_labels),
+        }},
+        indices
+      );
+    }}
+    if (phaseGd && window.Plotly) {{
+      Plotly.update(
+        phaseGd,
+        {{
+          x: Array.from({{length: nTrace}}, () => freq),
+          y: ch.phase,
+          name: ch.element_labels,
+          hovertemplate: ch.element_labels.map(
+            (lab) => lab + "<br>f=%{{x:.4g}} Hz<br>\\u2220=%{{y:.2f}}\\u00b0<extra></extra>"
+          ),
+        }},
+        {{
+          title: {{text: {name!r} + " phase — " + ch.label}},
+          annotations: updateAnnotations(phaseGd, ch.element_labels),
+        }},
+        indices
+      );
+    }}
+    applyOverlay(ch);
+  }}
+
+  select.addEventListener("change", () => applyChannel(select.value));
+  if (modeSelect) modeSelect.addEventListener("change", () => applyChannel(select.value));
+  function resizeChannelPlots() {{
+    [magWrap, phaseWrap].forEach((wrap) => {{
+      const gd = plotDiv(wrap);
+      if (gd && window.Plotly) {{
+        try {{ Plotly.Plots.resize(gd); }} catch (err) {{}}
+      }}
+    }});
+  }}
+  requestAnimationFrame(() => {{
+    applyChannel(select.value);
+    resizeChannelPlots();
+  }});
+  window.addEventListener("resize", resizeChannelPlots);
+}})();
+</script>
+"""
+
+
+def _transfer_block_grid_figure(
+    values: np.ndarray,
+    frequencies_hz: np.ndarray,
+    *,
+    out_indices: Sequence[int],
+    in_indices: Sequence[int],
+    out_labels: Sequence[str],
+    in_labels: Sequence[str],
+    title: str,
+    quantity: str,
+    y_axis_title: str,
+    go,
+    make_subplots,
+    include_modal_overlay_traces: bool = False,
+):
+    """Magnitude or phase Bode grid for one MIMO block (typically 2×2 dq)."""
+
+    vals = np.asarray(values, dtype=complex)
+    freq = np.asarray(frequencies_hz, dtype=float).ravel()
+    n_out = max(1, len(out_indices))
+    n_in = max(1, len(in_indices))
+    empty = vals.ndim != 3 or vals.size == 0 or freq.size == 0 or not out_indices or not in_indices
+
+    titles = []
+    for r in out_indices:
+        for c in in_indices:
+            titles.append(f"{out_labels[r]}/{in_labels[c]}")
+    if empty:
+        titles = ["(empty)"]
+
+    fig = make_subplots(
+        rows=n_out,
+        cols=n_in,
+        shared_xaxes=True,
+        shared_yaxes=False,
+        subplot_titles=titles,
+        horizontal_spacing=0.10,
+        vertical_spacing=0.12,
+    )
+
+    for rr, r in enumerate(out_indices if not empty else [0]):
+        for cc, c in enumerate(in_indices if not empty else [0]):
+            label = titles[rr * n_in + cc] if titles else f"({r},{c})"
+            if empty:
+                y = np.array([])
+            else:
+                channel = vals[:, r, c]
+                if quantity == "phase":
+                    y = np.unwrap(np.angle(channel)) * 180.0 / np.pi
+                else:
+                    y = np.abs(channel)
+            if quantity == "phase":
+                hover = f"{label}<br>f=%{{x:.4g}} Hz<br>∠=%{{y:.2f}}°<extra></extra>"
+            else:
+                hover = f"{label}<br>f=%{{x:.4g}} Hz<br>|G|=%{{y:.4g}} p.u.<extra></extra>"
+            fig.add_trace(
+                go.Scatter(
+                    x=freq,
+                    y=y,
+                    mode="lines",
+                    name=label,
+                    showlegend=False,
+                    hovertemplate=hover,
+                ),
+                row=rr + 1,
+                col=cc + 1,
+            )
+            if rr == n_out - 1:
+                fig.update_xaxes(title_text="Frequency (Hz)", row=rr + 1, col=cc + 1)
+            if cc == 0:
+                fig.update_yaxes(title_text=y_axis_title, row=rr + 1, col=cc + 1)
+
+    if include_modal_overlay_traces and not empty:
+        # Placeholder traces updated by the channel/mode dropdown JS.
+        for rr, _r in enumerate(out_indices):
+            for cc, _c in enumerate(in_indices):
+                label = titles[rr * n_in + cc]
+                fig.add_trace(
+                    go.Scatter(
+                        x=freq,
+                        y=[None] * len(freq),
+                        mode="lines",
+                        name=f"modal {label}",
+                        line=dict(dash="dash", width=1.5, color="#c51b8a"),
+                        showlegend=False,
+                        visible=False,
+                        hovertemplate=(
+                            f"modal {label}<br>f=%{{x:.4g}} Hz<br>|R/(j2πf−λ)|=%{{y:.4g}}<extra></extra>"
+                        ),
+                    ),
+                    row=rr + 1,
+                    col=cc + 1,
+                )
+
+    fig.update_layout(
+        title_text=title,
+        height=max(420, 220 * n_out),
+        autosize=True,
+        showlegend=False,
+        margin=dict(t=60, b=40, l=60, r=20),
+        hovermode="x unified",
+    )
+    # Omit fixed layout.width so the figure fills the card (responsive config).
+    fig.layout.width = None
     return fig
+
+
+def _mimo_dq_blocks(output_labels: Sequence[str], input_labels: Sequence[str]) -> list[dict[str, Any]]:
+    """Build selectable bus-to-bus blocks (2×2 dq when both sides are dq ports)."""
+
+    out_groups = _port_axis_groups(output_labels)
+    in_groups = _port_axis_groups(input_labels)
+    blocks: list[dict[str, Any]] = []
+    # Prefer self blocks first, then off-diagonal.
+    ordered: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for og in out_groups:
+        for ig in in_groups:
+            if og["key"] == ig["key"]:
+                ordered.append((og, ig))
+    for og in out_groups:
+        for ig in in_groups:
+            if og["key"] != ig["key"]:
+                ordered.append((og, ig))
+    for og, ig in ordered:
+        out_idx = list(og["indices"])
+        in_idx = list(ig["indices"])
+        # Keep square leading block (2×2 dq or 1×1 dc).
+        size = min(len(out_idx), len(in_idx), 2)
+        if size == 0:
+            continue
+        out_idx = out_idx[:size]
+        in_idx = in_idx[:size]
+        block_id = f"{og['key']}_from_{ig['key']}"
+        if og["kind"] == "bus" and ig["kind"] == "bus":
+            label = f"Bus {og['bus']} ← Bus {ig['bus']}"
+        else:
+            label = f"{og['title']} ← {ig['title']}"
+        blocks.append(
+            {
+                "id": block_id,
+                "label": label,
+                "out_indices": out_idx,
+                "in_indices": in_idx,
+            }
+        )
+    return blocks
+
+
+def _port_axis_groups(labels: Sequence[str]) -> list[dict[str, Any]]:
+    """Group consecutive dq ports by bus number; fall back to singleton ports."""
+
+    groups: list[dict[str, Any]] = []
+    i = 0
+    while i < len(labels):
+        lab = str(labels[i])
+        m = re.fullmatch(r"([vi])_d(\d+)", lab, flags=re.IGNORECASE)
+        if m and i + 1 < len(labels):
+            nxt = str(labels[i + 1])
+            m2 = re.fullmatch(rf"{re.escape(m.group(1))}_q{m.group(2)}", nxt, flags=re.IGNORECASE)
+            if m2:
+                bus = int(m.group(2))
+                groups.append(
+                    {
+                        "key": f"bus{bus}",
+                        "kind": "bus",
+                        "bus": bus,
+                        "title": f"Bus {bus}",
+                        "indices": (i, i + 1),
+                    }
+                )
+                i += 2
+                continue
+        m_dc = re.fullmatch(r"([vi])(\d+)", lab, flags=re.IGNORECASE)
+        if m_dc:
+            bus = int(m_dc.group(2))
+            groups.append(
+                {
+                    "key": f"bus{bus}",
+                    "kind": "bus",
+                    "bus": bus,
+                    "title": f"Bus {bus}",
+                    "indices": (i,),
+                }
+            )
+            i += 1
+            continue
+        groups.append(
+            {
+                "key": f"port{i}",
+                "kind": "port",
+                "bus": None,
+                "title": lab,
+                "indices": (i,),
+            }
+        )
+        i += 1
+    return groups
+
+
+def _transfer_axis_labels(labels: Sequence[str] | None, count: int, *, prefix: str) -> list[str]:
+    if labels is not None and len(labels) >= count:
+        return [str(labels[i]) for i in range(count)]
+    return [f"{prefix}{i}" for i in range(count)]
 
 
 def _admittance_spectrum_sections(result: RunResult, *, go, make_subplots) -> list[tuple[str, str, str]]:
@@ -1047,6 +1738,14 @@ def _assemble_html(
       border-radius: 10px;
       padding: 0.85rem 1rem 1rem;
       box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+      overflow-x: auto;
+    }}
+    .card [id$="-mag-wrap"],
+    .card [id$="-phase-wrap"],
+    .card .plotly-graph-div,
+    .card .js-plotly-plot {{
+      width: 100% !important;
+      max-width: 100%;
     }}
     .card h2 {{
       margin: 0 0 0.6rem 0;
@@ -1065,7 +1764,18 @@ def _assemble_html(
       border: 1px solid var(--border);
       font-size: 0.95rem;
     }}
-    label[for="mode-select"] {{ font-weight: 600; }}
+    label[for="mode-select"],
+    label[for$="-channel-select"],
+    label[for$="-mode-select"] {{ font-weight: 600; }}
+    select[id$="-channel-select"],
+    select[id$="-mode-select"] {{
+      margin: 0.25rem 0 0.75rem 0.5rem;
+      padding: 0.35rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 0.95rem;
+      max-width: min(100%, 40rem);
+    }}
   </style>
 </head>
 <body>
