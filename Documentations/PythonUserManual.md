@@ -643,8 +643,10 @@ The test loads `Results/IEEE_14Bus_greybox.xlsx` (Python) and `Results/IEEE_14Bu
 | `ENABLE_HTML_DASHBOARD` | Write/open interactive Plotly HTML dashboard |
 | `ENABLE_GREYBOX` | Run greybox (also implied by greybox plot/export flags) |
 | `ENABLE_GREYBOX_*_LAYER*` | Boolean layer selection |
-| `GREYBOX_MODES` | `"auto"` or comma-separated 0-based indices |
-| `GREYBOX_FREQ_*` | Frequency sweep for Ysys/Zsys |
+| `GREYBOX_MODES` | `"auto"`, `"freq"`, or comma-separated **raw** state-space indices (same order as greybox `eig(A)`) |
+| `GREYBOX_MODE_FREQ_MIN_HZ` / `GREYBOX_MODE_FREQ_MAX_HZ` | Optional band for mode pick (with `"freq"` or when both set); top `GREYBOX_MODE_MAX_COUNT` least-damped oscillatory modes in band; falls back to `"auto"` if empty |
+| `GREYBOX_MODE_MAX_COUNT` | Max modes for `"auto"` / `"freq"` (default 3) |
+| `GREYBOX_FREQ_*` | Frequency sweep grid for Ysys/Zsys Bode (not mode selection) |
 | `ENABLE_EXPORT_*` | JSON / Excel outputs |
 | `SHOW_PLOTS` / `SAVE_PLOTS` / `PLOT_DIR` | Display vs save figures |
 
@@ -652,7 +654,7 @@ The test loads `Results/IEEE_14Bus_greybox.xlsx` (Python) and `Results/IEEE_14Bu
 
 ## 14. Limitations and tips
 
-- **Mode 0** is often a near-zero trivial eigenvalue; Layer 1 can be all zeros. Prefer `GREYBOX_MODES = "auto"` or pick oscillatory indices.  
+- **Mode 0** is often a near-zero trivial eigenvalue; Layer 1 can be all zeros. Prefer `GREYBOX_MODES = "auto"` (least-damped oscillatory modes) or pick oscillatory indices manually.  
 - Sensitivity layers currently target **AC \(dq\)** networks.  
 - Apparatus type 19 (stationary-frame GFL) is approximated by the dq GFL model with a warning.  
 - Unsupported types use a placeholder model and warn.  

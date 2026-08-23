@@ -55,8 +55,17 @@ ENABLE_GREYBOX_APP_LAYER2 = True   # apparatus Layer 2
 ENABLE_GREYBOX_APP_LAYER3 = True  # apparatus Layer 3 (also adds Layer3 sheet to Excel export)
 ENABLE_GREYBOX_SENS_LAYER12 = True   # sensitivity Layer 1/2
 ENABLE_GREYBOX_SENS_LAYER3 = True   # sensitivity Layer 3
-# Mode indices (0-based). Use "auto" to pick oscillatory modes.
-GREYBOX_MODES = "auto"
+# Mode selection (0-based indices into state-space eig(A), same order as greybox):
+#   "auto"  — top GREYBOX_MODE_MAX_COUNT least-damped oscillatory modes
+#   "freq"  — top N least-damped oscillatory modes in GREYBOX_MODE_FREQ_* band (fallback: "auto")
+#   (157, 159) or "157,159" — explicit raw indices
+# Band also applies when GREYBOX_MODE_FREQ_MIN_HZ and GREYBOX_MODE_FREQ_MAX_HZ are both set
+# (even if GREYBOX_MODES is "auto").
+GREYBOX_MODES = "freq"
+GREYBOX_MODE_FREQ_MIN_HZ = 1  # e.g. 1.0 to select modes by frequency band
+GREYBOX_MODE_FREQ_MAX_HZ = 10  # e.g. 10.0
+GREYBOX_MODE_MAX_COUNT = 3
+# Ysys/Zsys Bode frequency grid (unrelated to mode selection):
 GREYBOX_FREQ_MIN_HZ = 1
 GREYBOX_FREQ_MAX_HZ = 1000
 # Linear grid step (Hz). Overrides log-spaced GREYBOX_FREQ_COUNT when set.
@@ -145,24 +154,101 @@ def resolve_case_path(name: str, preferred: str = "json") -> Path:
     return matches[0].resolve()
 
 
-def parse_modes(spec: str | tuple[int, ...] | list[int], eigenvalues) -> tuple[int, ...]:
+def _system_eigenvalues(run_result):
+    """Eigenvalues in the same order as greybox modal analysis (``np.linalg.eig(A)``)."""
+
     import numpy as np
+
+    model = run_result.whole_system_dss
+    try:
+        matrix_a, _, _, _ = model.to_state_space()
+        values, _ = np.linalg.eig(matrix_a)
+    except np.linalg.LinAlgError:
+        from scipy.linalg import eig
+
+        values, _, _ = eig(model.A, model.E, left=False, right=False)
+    return np.asarray(values, dtype=complex).ravel()
+
+
+def _oscillatory_modes_scored(eigenvalues) -> list[tuple[int, float, float]]:
+    import numpy as np
+
+    scored: list[tuple[int, float, float]] = []
+    for idx, value in enumerate(np.asarray(eigenvalues, dtype=complex).ravel()):
+        if not np.isfinite(value):
+            continue
+        omega = float(np.imag(value))
+        if omega <= 1e-6:
+            continue
+        sigma = float(np.real(value))
+        mag = abs(complex(value))
+        freq_hz = abs(omega / (2 * np.pi))
+        zeta = (-sigma / mag) if mag > 0 else float("inf")
+        scored.append((idx, zeta, freq_hz))
+    return scored
+
+
+def _auto_least_damped_modes(eigenvalues, *, max_count: int = 3) -> tuple[int, ...]:
+    import numpy as np
+
+    scored = _oscillatory_modes_scored(eigenvalues)
+    scored.sort(key=lambda item: item[1])
+    if scored:
+        return tuple(idx for idx, _, _ in scored[: max(1, int(max_count))])
+    values = np.asarray(eigenvalues, dtype=complex).ravel()
+    finite = [idx for idx, value in enumerate(values) if np.isfinite(value)]
+    return tuple(finite[: max(1, int(max_count))]) if finite else (0,)
+
+
+def _modes_in_frequency_band(
+    eigenvalues,
+    freq_min_hz: float,
+    freq_max_hz: float,
+    *,
+    max_count: int = 3,
+) -> tuple[int, ...] | None:
+    if freq_min_hz > freq_max_hz:
+        freq_min_hz, freq_max_hz = freq_max_hz, freq_min_hz
+    in_band = [
+        (idx, zeta)
+        for idx, zeta, freq_hz in _oscillatory_modes_scored(eigenvalues)
+        if freq_min_hz <= freq_hz <= freq_max_hz
+    ]
+    if not in_band:
+        return None
+    in_band.sort(key=lambda item: item[1])
+    return tuple(idx for idx, _ in in_band[: max(1, int(max_count))])
+
+
+def parse_modes(
+    spec: str | tuple[int, ...] | list[int],
+    run_result,
+    *,
+    freq_min_hz: float | None = None,
+    freq_max_hz: float | None = None,
+    max_count: int = 3,
+) -> tuple[int, ...]:
+    import numpy as np
+
+    eigenvalues = _system_eigenvalues(run_result)
+    text = str(spec).strip().lower() if not isinstance(spec, (tuple, list)) else ""
+    use_band = text == "freq" or (freq_min_hz is not None and freq_max_hz is not None)
+    if use_band:
+        fmin = float(freq_min_hz if freq_min_hz is not None else 0.0)
+        fmax = float(freq_max_hz if freq_max_hz is not None else float("inf"))
+        band_modes = _modes_in_frequency_band(eigenvalues, fmin, fmax, max_count=max_count)
+        if band_modes:
+            return band_modes
+        print(
+            f"  No oscillatory modes in {fmin:g}–{fmax:g} Hz; "
+            f"falling back to top {max_count} least-damped modes."
+        )
+        return _auto_least_damped_modes(eigenvalues, max_count=max_count)
 
     if isinstance(spec, (tuple, list)):
         return tuple(int(v) for v in spec)
-    text = str(spec).strip().lower()
     if text == "auto":
-        values = np.asarray(eigenvalues, dtype=complex).ravel()
-        scored = [
-            (idx, abs(float(np.imag(value))))
-            for idx, value in enumerate(values)
-            if np.isfinite(value) and abs(float(np.imag(value))) > 1e-6
-        ]
-        scored.sort(key=lambda item: item[1], reverse=True)
-        if scored:
-            return tuple(idx for idx, _ in scored[:3])
-        finite = [idx for idx, value in enumerate(values) if np.isfinite(value)]
-        return tuple(finite[:3]) if finite else (0,)
+        return _auto_least_damped_modes(eigenvalues, max_count=max_count)
     return tuple(int(part.strip()) for part in text.split(",") if part.strip())
 
 
@@ -219,7 +305,13 @@ def main() -> None:
     )
     if need_greybox:
         print("\nGreybox analysis...")
-        modes = parse_modes(GREYBOX_MODES, result.eigenvalues)
+        modes = parse_modes(
+            GREYBOX_MODES,
+            result,
+            freq_min_hz=GREYBOX_MODE_FREQ_MIN_HZ,
+            freq_max_hz=GREYBOX_MODE_FREQ_MAX_HZ,
+            max_count=GREYBOX_MODE_MAX_COUNT,
+        )
         freq_grid = FrequencyGrid(
             min_hz=GREYBOX_FREQ_MIN_HZ,
             max_hz=GREYBOX_FREQ_MAX_HZ,
