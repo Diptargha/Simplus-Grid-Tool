@@ -174,7 +174,7 @@ Simplus-Grid-Tool/
 | `ENABLE_PLOT_POLE` | Global + zoomed pole map (Hz), with 10% damping lines |
 | `ENABLE_PLOT_ADMITTANCE` | Bus admittance Bode: \(Y_{dd}\) and complex-vector \(Y_{dq+}\) |
 | `ENABLE_PLOT_ADMITTANCE_DQ_AXES` | dd / dq / qd / qq Bode (MATLAB Modal `BodeDraw`) |
-| `ENABLE_PLOT_GRID_STRENGTH` | Network layout coloured by bus admittance strength |
+| `ENABLE_PLOT_GRID_STRENGTH` | Network layout coloured by MATLAB `BusStrength` (hybrid \(H_{ii}\) / \(1/H_{ii}\)) |
 | `ENABLE_PLOT_GREYBOX` | Ysys/Zsys Bode + Layer 1 pie / Layer 2 bars |
 | `ENABLE_HTML_DASHBOARD` | Interactive Plotly HTML dashboard (preferred for Layer 1/2/3) |
 
@@ -604,7 +604,7 @@ With `ENABLE_EXPORT_GREYBOX_EXCEL = True`, `Results/<case>_greybox.xlsx` typical
 | `Ysys_RealImag` / `Zsys_RealImag` | Wide Real/Imag |
 | `Layer1` / `Layer2` / `Layer3` | Apparatus participation (if enabled) |
 | `Eigenvalues` | Whole-system finite eigenvalues (rad/s and Hz) |
-| `StatePF` | State participation factors (MATLAB: selected modes/states from ModalAnalysis; Python: all modes) |
+| `StatePF` | State participation factors with `description` (state-symbol meaning) and `apparatus` columns (MATLAB: selected modes/states from ModalAnalysis; Python: all modes) |
 | `Sens_Layer12` | Node/branch sensitivity (if enabled) |
 
 ### 12.1 MATLAB greybox Excel export

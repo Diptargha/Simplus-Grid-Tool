@@ -34,7 +34,7 @@ import matplotlib
 #   "Hybrid_4Bus", "HVDC_Infbus_4Bus", "HVDC_SG_4Bus", "MTDC_Infbus_4Bus",
 # Default 4-bus:
 #   "UserData"
-USER_DATA_NAME = "NETS_NYPS_68Bus"
+USER_DATA_NAME = "IEEE_14Bus"
 
 # Preferred file type when resolving a short name: "json" or "excel" (xlsx/xlsm).
 USER_DATA_TYPE = "json"

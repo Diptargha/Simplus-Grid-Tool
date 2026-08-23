@@ -16,7 +16,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .analysis import bus_strength, stability_report
+from .analysis import bus_strength, bus_type_vif, stability_report
 from .dss import dss2ss
 from .greybox import GreyboxResult
 from .pipeline import RunResult
@@ -36,17 +36,7 @@ def _active_apparatus_bus(apparatus_type: int) -> bool:
 def _bus_type_vif(apparatus_types: Sequence[int]) -> tuple[list[int], list[int], list[int]]:
     """MATLAB BusTypeVIF indices (1-based apparatus indices = bus numbers for 1-bus units)."""
 
-    vbus: list[int] = []
-    ibus: list[int] = []
-    fbus: list[int] = []
-    for idx, app_type in enumerate(apparatus_types, start=1):
-        if (0 <= app_type <= 9) or app_type == 90 or (20 <= app_type <= 40) or app_type == 50:
-            vbus.append(idx)
-        elif (10 <= app_type <= 19) or app_type in {41, 51}:
-            ibus.append(idx)
-        elif app_type == 100:
-            fbus.append(idx)
-    return vbus, ibus, fbus
+    return bus_type_vif(apparatus_types)
 
 
 def plot_pole_map(eigenvalues: np.ndarray, *, fig=None, show: bool = False):
@@ -326,8 +316,8 @@ def plot_grid_strength(result: RunResult, *, fig=None, show: bool = False):
     nx.draw_networkx_labels(graph, pos, ax=ax, font_size=8)
     nx.draw_networkx_nodes(graph, pos, node_color=color_map, node_size=80, ax=ax, zorder=2)
     cbar = fig.colorbar(sc, ax=ax)
-    cbar.set_label(r"$\log_{10}$(Bus Admittance)")
-    ax.set_title("Grid strength")
+    cbar.set_label(r"$\log_{10}$(Bus Strength)")
+    ax.set_title("Grid strength (MATLAB BusStrength)")
     ax.set_axis_off()
     fig.tight_layout()
     if show:

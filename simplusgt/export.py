@@ -56,6 +56,116 @@ APPARATUS_TYPE_NAMES = {
 }
 
 
+# Base state symbols (bus/branch suffixes stripped) → short physical/control meaning.
+# Drawn from MATLAB/Python SignalList names; not present as a glossary in MATLAB.
+STATE_SYMBOL_DESCRIPTIONS: dict[str, str] = {
+    # Synchronous machine / common dq
+    "i_d": "d-axis current",
+    "i_q": "q-axis current",
+    "v_d": "d-axis voltage",
+    "v_q": "q-axis voltage",
+    "w": "Angular frequency",
+    "theta": "dq-frame / rotor angle",
+    "epsilon": "Integrated angle (global-frame embedding)",
+    # Current / voltage controller integrators
+    "i_d_i": "d-axis current-controller integrator",
+    "i_q_i": "q-axis current-controller integrator",
+    "v_d_i": "d-axis voltage-controller integrator",
+    "v_q_i": "q-axis voltage-controller integrator",
+    "v_od_i": "d-axis output-voltage controller integrator",
+    "v_oq_i": "q-axis output-voltage controller integrator",
+    "i_ld_i": "d-axis inductor-current controller integrator",
+    "i_lq_i": "q-axis inductor-current controller integrator",
+    # PLL
+    "w_pll_i": "PLL frequency integrator",
+    "pll_i": "PLL integrator",
+    # DC-link / battery / PV
+    "v_dc": "DC-link voltage",
+    "v_dc_i": "DC-voltage controller integrator",
+    "i": "DC-side current",
+    "i_i": "DC-current controller integrator",
+    "i_bat": "Battery current",
+    "i_bat_ref": "Battery current reference",
+    "duty_cycle": "DC/DC converter duty cycle",
+    "v_pv": "PV array voltage",
+    "v_pv_i": "PV voltage-controller integrator",
+    "i_l": "PV / boost inductor current",
+    "i_l_i": "Inductor-current controller integrator",
+    "v_i": "Voltage-controller integrator (PV GFM)",
+    # Grid-forming LC filter
+    "i_ld": "d-axis filter inductor current",
+    "i_lq": "q-axis filter inductor current",
+    "v_od": "d-axis filter capacitor / output voltage",
+    "v_oq": "q-axis filter capacitor / output voltage",
+    "i_od": "d-axis output current",
+    "i_oq": "q-axis output current",
+    "v_d_ref": "d-axis voltage reference (droop)",
+    "v_od_r": "d-axis output-voltage reference",
+    # Machine / wind
+    "i_sd": "d-axis machine-side current",
+    "i_sq": "q-axis machine-side current",
+    "i_sd_i": "d-axis machine-current controller integrator",
+    "i_sq_i": "q-axis machine-current controller integrator",
+    "w_m": "Mechanical / rotor speed",
+    "w_m_i": "Speed-controller integrator",
+    "theta_m": "Mechanical rotor angle",
+    "i_a": "Phase-a current (stationary frame)",
+    "i_b": "Phase-b current (stationary frame)",
+    "i_al": "Alpha-axis current",
+    "i_be": "Beta-axis current",
+    "i_al_i": "Alpha-axis current-controller integrator",
+    "i_be_i": "Beta-axis current-controller integrator",
+    "i_al_ii": "Alpha-axis current-controller double integrator",
+    "i_be_ii": "Beta-axis current-controller double integrator",
+    "i_gd": "d-axis grid-side current",
+    "i_gq": "q-axis grid-side current",
+    "v_o": "Output voltage magnitude",
+    "i_Ld": "d-axis load inductor current",
+    "i_Lq": "q-axis load inductor current",
+    # Network DSS branch states (compact naming)
+    "id": "Network branch d-axis current",
+    "iq": "Network branch q-axis current",
+    "vd": "Network branch / shunt d-axis voltage",
+    "vq": "Network branch / shunt q-axis voltage",
+    "v": "Network DC branch / bus voltage state",
+    # Interconnection algebraic states
+    "xi": "Algebraic interconnection variable",
+}
+
+
+def _state_base_symbol(state: str) -> str:
+    """Strip bus / branch suffixes from a whole-system state label."""
+
+    if re.fullmatch(r"xi_\d+", state):
+        return "xi"
+    # Compact network labels: id1-2, iq3-4, vd1-1, i2-3, v5-5
+    compact = re.fullmatch(r"(id|iq|vd|vq|i|v)(\d+)-(\d+)", state)
+    if compact:
+        return compact.group(1)
+    # Apparatus labels: i_d2, w_pll_i3, theta1-2 (multi-bus apparatus)
+    suffixed = re.fullmatch(r"(.+?)(\d+(?:-\d+)?)", state)
+    if suffixed and suffixed.group(1):
+        return suffixed.group(1)
+    return state
+
+
+def _state_description(state: str) -> str:
+    """Human-readable meaning of a state symbol (independent of which apparatus)."""
+
+    base = _state_base_symbol(state)
+    if base in STATE_SYMBOL_DESCRIPTIONS:
+        return STATE_SYMBOL_DESCRIPTIONS[base]
+    if base.startswith("inv_u"):
+        return "Inverted algebraic input (descriptor reduction)"
+    return f"State symbol '{base}' (no glossary entry)"
+
+
+def apparatus_name_by_bus(result: RunResult) -> dict[int, str]:
+    """Map each bus number to a human-readable connected apparatus label."""
+
+    return _apparatus_component_map(result)
+
+
 def _apparatus_component_map(result: RunResult) -> dict[int, str]:
     mapping: dict[int, str] = {}
     for apparatus in result.case.Apparatus:
@@ -644,6 +754,7 @@ def _eigenvalues_dataframe(eigenvalues: np.ndarray):
 def _state_pf_dataframe(run_result: RunResult):
     import pandas as pd
 
+    apparatus_by_bus = _apparatus_component_map(run_result)
     modes = descriptor_modes(run_result.whole_system_dss, max_states_per_mode=None)
     rows: list[dict[str, Any]] = []
     for mode in modes:
@@ -661,6 +772,8 @@ def _state_pf_dataframe(run_result: RunResult):
                     "damping_ratio": mode.damping_ratio,
                     "state_index": state_index,
                     "state": state,
+                    "description": _state_description(state),
+                    "apparatus": _state_component(state, apparatus_by_bus),
                     "pf_abs": float(factor),
                 }
             )

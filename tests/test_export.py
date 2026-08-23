@@ -58,5 +58,18 @@ def test_greybox_excel_export_contains_zsys(tmp_path):
     assert {"mode_index", "real_rad_s", "imag_rad_s", "real_hz", "imag_hz", "frequency_hz", "damping_ratio"} <= set(eigs.columns)
     assert len(eigs) >= 1
     state_pf = pd.read_excel(out, sheet_name="StatePF")
-    assert {"mode_index", "state", "pf_abs"} <= set(state_pf.columns)
+    assert {"mode_index", "state", "description", "apparatus", "pf_abs"} <= set(state_pf.columns)
     assert len(state_pf) >= 1
+    assert state_pf["apparatus"].notna().all()
+    assert state_pf["description"].notna().all()
+    assert any(
+        "SynchronousMachine" in str(name) or "InfiniteBusAc" in str(name) or "Network" in str(name)
+        for name in state_pf["apparatus"]
+    )
+    assert any(
+        "current" in str(text).lower()
+        or "angle" in str(text).lower()
+        or "frequency" in str(text).lower()
+        or "interconnection" in str(text).lower()
+        for text in state_pf["description"]
+    )

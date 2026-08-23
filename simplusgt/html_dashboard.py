@@ -15,7 +15,8 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .analysis import bus_strength, stability_report
+from .analysis import bus_strength, bus_type_name, bus_type_vif, stability_report
+from .export import apparatus_name_by_bus
 from .dss import dss2ss
 from .greybox import GreyboxResult
 from .pipeline import RunResult
@@ -23,7 +24,6 @@ from .plotting import (
     COMPLEX_T,
     _active_apparatus_bus,
     _admittance_plot_freq_count,
-    _bus_type_vif,
     _ss_frequency_response,
 )
 
@@ -433,7 +433,8 @@ def _grid_strength_figure(result: RunResult, *, go):
             if graph_matrix[i, j] > 0:
                 graph.add_edge(i + 1, j + 1, weight=float(graph_matrix[i, j]))
     pos = nx.spring_layout(graph, seed=0, weight="weight")
-    vbus, ibus, fbus = _bus_type_vif(result.netlists.apparatus_types)
+    vbus, ibus, fbus = bus_type_vif(result.netlists.apparatus_types)
+    apparatus_by_bus = apparatus_name_by_bus(result)
 
     edge_x: list[float | None] = []
     edge_y: list[float | None] = []
@@ -448,6 +449,8 @@ def _grid_strength_figure(result: RunResult, *, go):
     ys = [pos[n][1] for n in nodes]
     strength = np.log10(np.maximum(np.abs(ydiag), 1e-30))
     node_strength = [float(strength[n - 1]) for n in nodes]
+    node_types = [bus_type_name(n, vbus, ibus, fbus) for n in nodes]
+    node_apparatus = [apparatus_by_bus.get(n, "None") for n in nodes]
     colors = []
     for node in nodes:
         if node in vbus:
@@ -482,16 +485,22 @@ def _grid_strength_figure(result: RunResult, *, go):
                 color=node_strength,
                 colorscale="Viridis",
                 showscale=True,
-                colorbar=dict(title="log10(|Y|)"),
+                colorbar=dict(title="log10(strength)"),
                 line=dict(width=2, color=colors),
             ),
-            customdata=np.column_stack([nodes, node_strength]),
-            hovertemplate="Bus %{customdata[0]}<br>log10(|Y|)=%{customdata[1]:.3f}<extra></extra>",
+            customdata=list(zip(nodes, node_strength, node_types, node_apparatus)),
+            hovertemplate=(
+                "Bus %{customdata[0]}<br>"
+                "Type: %{customdata[2]}<br>"
+                "Apparatus: %{customdata[3]}<br>"
+                "log10(strength)=%{customdata[1]:.3f}"
+                "<extra></extra>"
+            ),
             showlegend=False,
         )
     )
     fig.update_layout(
-        title_text="Grid strength",
+        title_text="Grid strength (MATLAB BusStrength)",
         xaxis=dict(visible=False),
         yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         height=520,
